@@ -67,7 +67,7 @@ def save_data(items, data_type, source):
 # === 爬蟲函數 ===
 def crawl_165():
     urls, keywords = set(), set()
-    headers = {'User-Agent': 'AntiFraudBot/1.0 (+https://github.com/yourname/AntiScam-LineBot)'}
+    headers = {'User-Agent': 'AntiFraudBot/1.0'}
     try:
         # 詐騙網站
         resp = requests.get("https://165.npa.gov.tw/#/fraud/website", headers=headers, timeout=15)
@@ -89,6 +89,12 @@ def crawl_165():
         logger.info(f"165: +{added_urls} URL, +{added_kw} 話術")
     except Exception as e:
         logger.error(f"165 錯誤: {e}")
+    
+    return {
+        'urls': list(urls),
+        'keywords': list(keywords),
+        'added': {'urls': added_urls, 'keywords': added_kw}
+    }
 
 def crawl_datagov():
     datasets = set()
@@ -102,6 +108,11 @@ def crawl_datagov():
         logger.info(f"data.gov.tw: +{added} 資料集")
     except Exception as e:
         logger.error(f"data.gov.tw 錯誤: {e}")
+    
+    return {
+        'datasets': list(datasets),
+        'added': added
+    }
 
 def crawl_tca():
     news = set()
@@ -116,6 +127,11 @@ def crawl_tca():
         logger.info(f"TCA: +{added} 新聞")
     except Exception as e:
         logger.error(f"TCA 錯誤: {e}")
+    
+    return {
+        'news': list(news),
+        'added': added
+    }
 
 def crawl_alert():
     alerts = set()
@@ -130,19 +146,37 @@ def crawl_alert():
         logger.info(f"alert.gov.tw: +{added} 警示")
     except Exception as e:
         logger.error(f"alert.gov.tw 錯誤: {e}")
+    
+    return {
+        'alerts': list(alerts),
+        'added': added
+    }
 
-# === 全部爬蟲 ===
+# === 整合函式：一次回傳全部資料 ===
 def run_all_crawlers():
     logger.info("開始四站爬蟲...")
-    crawl_165()
+    result_165 = crawl_165()
     time.sleep(3)
-    crawl_datagov()
+    result_datagov = crawl_datagov()
     time.sleep(2)
-    crawl_tca()
+    result_tca = crawl_tca()
     time.sleep(2)
-    crawl_alert()
+    result_alert = crawl_alert()
     logger.info("爬蟲完成")
-
+    
+    return {
+        '165': result_165,
+        'datagov': result_datagov,
+        'tca': result_tca,
+        'alert': result_alert,
+        'total_added': (
+            result_165['added'].get('urls', 0) + 
+            result_165['added'].get('keywords', 0) +
+            result_datagov['added'] +
+            result_tca['added'] +
+            result_alert['added']
+        )
+    }
 # === 背景排程 ===
 def start_scheduler():
     schedule.every(6).hours.do(run_all_crawlers)
