@@ -1,30 +1,55 @@
-# app.py
 import os
 import re
 import sqlite3
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
-from flask import Flask, request, abort
-from linebot import LineBotApi, WebhookHandler
-from linebot.exceptions import InvalidSignatureError
-from linebot.models import MessageEvent, TextMessage, TextSendMessage, FlexMessage, FlexContainer
 import threading
 import time
 import schedule
 import logging
+import urllib3
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+
+# === 抑制 SSL 警告 ===
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # === 設定 ===
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
+# === 建立帶重試的 Session ===
+def create_session():
+    session = requests.Session()
+    retry = Retry(total=3, backoff_factor=2, status_forcelist=[429, 500, 502, 503, 504])
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    session.headers.update({'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AntiFraudBot/3.0'})
+    return session
 
-# Line Bot 設定（請替換）
-CHANNEL_ACCESS_TOKEN = "YOUR_CHANNEL_ACCESS_TOKEN"
-CHANNEL_SECRET = "YOUR_CHANNEL_SECRET"
-line_bot_api = LineBotApi(CHANNEL_ACCESS_TOKEN)
-handler = WebhookHandler(CHANNEL_SECRET)
+session = create_session()
+
+# === Selenium 設定（用於動態網站） ===
+def get_selenium_driver():
+    options = Options()
+    options.add_argument('--headless')  # 無頭模式
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=options)
+    return driver
 
 # === 初始化資料庫 ===
 def init_db():
@@ -59,30 +84,42 @@ def save_data(items, data_type, source):
             if c.rowcount > 0:
                 added += 1
         except Exception as e:
-            logger.error(f"儲存錯誤: {e}")
+            logger.error(f"儲存錯誤 ({data_type}): {e}")
     conn.commit()
     conn.close()
     return added
 
-# === 爬蟲函數 ===
+# === 爬蟲函數（重試 + 備用 + Selenium）===
 def crawl_165():
     urls, keywords = set(), set()
-    headers = {'User-Agent': 'AntiFraudBot/1.0'}
+    added_urls, added_kw = 0, 0
     try:
-        # 詐騙網站
-        resp = requests.get("https://165.npa.gov.tw/#/fraud/website", headers=headers, timeout=15)
-        matches = re.findall(r'https?://[^\s"\'<>]+', resp.text)
-        for u in matches:
-            if '165' not in u and len(u) > 10:
-                urls.add(u.split('?')[0].split('#')[0])
+        # 用 Selenium 處理動態頁面
+        driver = get_selenium_driver()
+        driver.get("https://165.npa.gov.tw/")
+        time.sleep(5)  # 等待載入
         
+        # 詐騙網站
+        try:
+            website_links = driver.find_elements(By.CSS_SELECTOR, 'a[href*="fraud/website"], a[href*="詐騙網站"]')
+            for link in website_links:
+                href = link.get_attribute('href')
+                if href and '165' not in href and len(href) > 10:
+                    urls.add(href.split('?')[0].split('#')[0])
+        except:
+            pass
+
         # 話術
-        resp2 = requests.get("https://165.npa.gov.tw/#/fraud/tactics", headers=headers, timeout=15)
-        soup = BeautifulSoup(resp2.text, 'html.parser')
-        for div in soup.find_all('div', string=re.compile('猜猜我是誰|帳戶|轉帳|緊急')):
-            text = div.get_text(strip=True)[:100]
-            if text:
-                keywords.add(text)
+        try:
+            tactic_links = driver.find_elements(By.CSS_SELECTOR, 'a[href*="fraud/tactics"], a[href*="詐騙手法"]')
+            for link in tactic_links:
+                text = link.text.strip()[:100]
+                if text and re.search(r'猜猜我是誰|帳戶|轉帳|緊急|投資', text):
+                    keywords.add(text)
+        except:
+            pass
+        
+        driver.quit()
         
         added_urls = save_data(urls, 'url', '165.npa.gov.tw')
         added_kw = save_data(keywords, 'keyword', '165.npa.gov.tw')
@@ -98,12 +135,26 @@ def crawl_165():
 
 def crawl_datagov():
     datasets = set()
+    added = 0
     try:
-        api = "https://ods.pmi.gov.tw/api/v1/datasets"
-        resp = requests.get(api, params={'q': '165', 'limit': 20}, timeout=10)
-        for item in resp.json().get('data', []):
-            if '詐騙' in item.get('title', ''):
-                datasets.add(item.get('title', '')[:100])
+        # 備用 API
+        apis = [
+            "https://data.gov.tw/api/v2/rest/dataset",
+            "https://api.data.gov.tw/v2/rest/dataset"
+        ]
+        for api in apis:
+            try:
+                resp = session.get(api, params={'q': '詐騙', 'limit': 20}, timeout=15, verify=False)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    results = data.get('result', {}).get('results', []) or data.get('data', [])
+                    for item in results:
+                        title = item.get('title', '') or item.get('dataset_title', '')
+                        if '詐騙' in title:
+                            datasets.add(title[:100])
+                    break
+            except:
+                continue
         added = save_data(datasets, 'dataset', 'data.gov.tw')
         logger.info(f"data.gov.tw: +{added} 資料集")
     except Exception as e:
@@ -116,15 +167,22 @@ def crawl_datagov():
 
 def crawl_tca():
     news = set()
+    added = 0
     try:
-        resp = requests.get("https://www.tca.org.tw/news", headers={'User-Agent': 'AntiFraudBot'}, timeout=15)
-        soup = BeautifulSoup(resp.text, 'html.parser')
-        for a in soup.select('a[href*="/news/"]'):
-            title = a.get_text(strip=True)
-            if any(k in title for k in ['詐騙', '投資', '假']):
-                news.add(title[:100])
-        added = save_data(news, 'news', 'tca.org.tw')
-        logger.info(f"TCA: +{added} 新聞")
+        resp = session.get("https://www.tca.org.tw/news", timeout=20, verify=False)
+        if resp.status_code == 200:
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            selectors = ['a[href*="/news/"]', '.news-title', '.title a', 'h3 a', '.article-title']
+            for sel in selectors:
+                items = soup.select(sel)
+                for item in items:
+                    title = item.get_text(strip=True)
+                    if any(k in title for k in ['詐騙', '投資', '假', '消保', '警示']):
+                        news.add(title[:100])
+                if news:
+                    break
+            added = save_data(news, 'news', 'tca.org.tw')
+            logger.info(f"TCA: +{added} 新聞")
     except Exception as e:
         logger.error(f"TCA 錯誤: {e}")
     
@@ -135,24 +193,40 @@ def crawl_tca():
 
 def crawl_alert():
     alerts = set()
+    added = 0
     try:
-        resp = requests.get("https://www.alert.gov.tw/News", headers={'User-Agent': 'AntiFraudBot'}, timeout=15)
-        soup = BeautifulSoup(resp.text, 'html.parser')
-        for item in soup.select('.card-title, .news-title'):
-            title = item.get_text(strip=True)
-            if '詐騙' in title or '警示' in title:
-                alerts.add(title[:120])
-        added = save_data(alerts, 'alert', 'alert.gov.tw')
-        logger.info(f"alert.gov.tw: +{added} 警示")
+        urls = [
+            "https://www.npa.gov.tw/NPAB/content/Index/doc?cid=200&mid=200",
+            "https://165.npa.gov.tw/fraud/alert"
+        ]
+        for url in urls:
+            try:
+                resp = session.get(url, timeout=20, verify=False)
+                if resp.status_code == 200:
+                    soup = BeautifulSoup(resp.text, 'html.parser')
+                    selectors = ['.news-title', '.list-title', '.item-title', 'h3', 'h4', '.alert-title']
+                    for sel in selectors:
+                        items = soup.select(sel)
+                        for item in items:
+                            title = item.get_text(strip=True)
+                            if '詐騙' in title or '警示' in title:
+                                alerts.add(title[:120])
+                        if alerts:
+                            break
+                    break
+            except:
+                continue
+        added = save_data(alerts, 'alert', 'npa.gov.tw')
+        logger.info(f"警政署: +{added} 警示")
     except Exception as e:
-        logger.error(f"alert.gov.tw 錯誤: {e}")
+        logger.error(f"警政署 錯誤: {e}")
     
     return {
         'alerts': list(alerts),
         'added': added
     }
 
-# === 整合函式：一次回傳全部資料 ===
+# === 整合 + 背景排程 ===
 def run_all_crawlers():
     logger.info("開始四站爬蟲...")
     result_165 = crawl_165()
@@ -164,83 +238,43 @@ def run_all_crawlers():
     result_alert = crawl_alert()
     logger.info("爬蟲完成")
     
+    total_added = (
+        result_165['added'].get('urls', 0) + 
+        result_165['added'].get('keywords', 0) +
+        result_datagov['added'] +
+        result_tca['added'] +
+        result_alert['added']
+    )
+    
+    logger.info(f"總新增: {total_added} 筆")
     return {
         '165': result_165,
         'datagov': result_datagov,
         'tca': result_tca,
         'alert': result_alert,
-        'total_added': (
-            result_165['added'].get('urls', 0) + 
-            result_165['added'].get('keywords', 0) +
-            result_datagov['added'] +
-            result_tca['added'] +
-            result_alert['added']
-        )
+        'total_added': total_added
     }
-# === 背景排程 ===
+
 def start_scheduler():
     schedule.every(6).hours.do(run_all_crawlers)
-    run_all_crawlers()  # 啟動先跑一次
+    run_all_crawlers()
     while True:
         schedule.run_pending()
         time.sleep(60)
 
-# === 查詢詐騙 ===
-def check_scam(text):
-    conn = sqlite3.connect('anti_scam.db')
-    c = conn.cursor()
-    
-    # 查 URL
-    urls = re.findall(r'https?://[^\s]+', text)
-    for url in urls:
-        url_clean = url.split('?')[0].split('#')[0]
-        c.execute("SELECT content FROM scam_data WHERE type='url' AND content LIKE ?", (f"%{url_clean}%",))
-        if c.fetchone():
-            conn.close()
-            return f"危險！偵測到詐騙網站：\n{url_clean}\n\n請勿點擊或輸入個資！"
-    
-    # 查關鍵字
-    c.execute("SELECT content FROM scam_data WHERE type='keyword'")
-    for (kw,) in c.fetchall():
-        if kw in text:
-            return f"警告！偵測到詐騙話術：\n「{kw}」\n\n請提高警覺！"
-    
-    conn.close()
-    return None
-
-# === Line Bot 處理 ===
-@handler.add(MessageEvent, message=TextMessage)
-def handle_message(event):
-    user_text = event.message.text
-    reply = check_scam(user_text)
-    
-    if reply:
-        line_bot_api.reply_message(
-            event.reply_token,
-            TextSendMessage(text=reply)
-        )
-    else:
-        # 可加入其他回應
-        pass
-
-@app.route("/callback", methods=['POST'])
-def callback():
-    signature = request.headers['X-Line-Signature']
-    body = request.get_data(as_text=True)
-    try:
-        handler.handle(body, signature)
-    except InvalidSignatureError:
-        abort(400)
-    return 'OK'
-
-# === 啟動 ===
+# === 主程式 ===
 if __name__ == "__main__":
     init_db()
     
-    # 啟動背景爬蟲
     crawler_thread = threading.Thread(target=start_scheduler, daemon=True)
     crawler_thread.start()
     
-    # 啟動 Flask
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+    print("防詐爬蟲系統已啟動！")
+    print("每 6 小時自動更新一次詐騙資料。")
+    print("按 Ctrl+C 停止程式。")
+    
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("\n爬蟲系統已停止。")
