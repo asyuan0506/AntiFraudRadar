@@ -11,7 +11,7 @@ import os
 from urllib.parse import urljoin, urlparse
 from PIL import Image
 from io import BytesIO
-import dateutil.parser  
+import dateutil.parser  # 新增：pip install python-dateutil
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -37,11 +37,11 @@ def get_storage_path(article_id):
 # === 新增：動態提取發布時間 ===
 def extract_pub_date(soup, domain):
     """
-    從 HTML 提取真實發布時間
+    精準提取「發布時間」，避免抓到更新時間
     支援：刑事局、TVBS、聯合
     """
-    # 1. meta 標籤（最優先）
-    meta_selectors = [
+    # === 步驟 1：優先抓「發布時間」meta（絕不抓 modified）===
+    publish_meta = [
         'meta[property="article:published_time"]',
         'meta[name="pubdate"]',
         'meta[property="og:published_time"]',
@@ -49,26 +49,33 @@ def extract_pub_date(soup, domain):
         'meta[property="rnews:datePublished"]',
         'meta[itemprop="datePublished"]'
     ]
-    for sel in meta_selectors:
+    for sel in publish_meta:
         tag = soup.select_one(sel)
         if tag and tag.get('content'):
             try:
                 dt = dateutil.parser.isoparse(tag['content'])
+                # 過濾未來時間（避免抓到「預約發布」）
+                if dt > datetime.now(dt.tzinfo):
+                    continue
                 return dt.isoformat() + "Z"
             except:
                 continue
 
-    # 2. <time> 標籤
+    # === 步驟 2：<time> 標籤 + 關鍵字過濾 ===
     time_tag = soup.find('time')
-    if time_tag and time_tag.get('datetime'):
-        try:
-            dt = dateutil.parser.isoparse(time_tag['datetime'])
-            return dt.isoformat() + "Z"
-        except:
-            pass
+    if time_tag:
+        dt_str = time_tag.get('datetime') or time_tag.get_text(strip=True)
+        if dt_str and ('發布' in dt_str or '刊登' in dt_str or '發佈' in dt_str):
+            try:
+                dt = dateutil.parser.parse(dt_str, fuzzy=True)
+                if dt < datetime.now(dt.tzinfo):
+                    return dt.isoformat() + "Z"
+            except:
+                pass
 
-    # 3. 文字時間（依網站）
+    # === 步驟 3：網站專屬精準選擇器 ===
     if 'cib.npa.gov.tw' in domain:
+        # 刑事局：找「發布日期：2025年1月1日」
         text = soup.get_text()
         m = re.search(r'發布日期[:：\s]*(\d{4}[-/年]\d{1,2}[-/月]\d{1,2})', text)
         if m:
@@ -80,27 +87,46 @@ def extract_pub_date(soup, domain):
                 pass
 
     elif 'tvbs.com.tw' in domain:
-        date_tag = soup.select_one('.time, .date, time')
-        if date_tag:
-            text = date_tag.get_text(strip=True)
-            try:
-                dt = dateutil.parser.parse(text, fuzzy=True)
-                return dt.isoformat() + "Z"
-            except:
-                pass
+        # TVBS：找 .time 或 time 標籤，且包含「小時前」以外
+        for sel in ['.time', 'time', '.date']:
+            tag = soup.select_one(sel)
+            if tag:
+                text = tag.get_text(strip=True)
+                if '小時前' in text or '分鐘前' in text or '剛剛' in text:
+                    continue
+                try:
+                    dt = dateutil.parser.parse(text, fuzzy=True)
+                    if dt.year >= 2000:
+                        return dt.isoformat() + "Z"
+                except:
+                    continue
 
     elif 'udn.com' in domain:
-        date_tag = soup.select_one('.article-content__time, time')
-        if date_tag:
-            text = date_tag.get_text(strip=True)
+        # 聯合：找 .article-content__time，且不是「更新」
+        tag = soup.select_one('.article-content__time')
+        if tag and '更新' not in tag.get_text():
             try:
-                dt = dateutil.parser.parse(text, fuzzy=True)
+                dt = dateutil.parser.parse(tag.get_text(strip=True), fuzzy=True)
+                if dt.year >= 2000:
+                    return dt.isoformat() + "Z"
+            except:
+                pass
+
+    # === 步驟 4：備援 → 絕對不用 now()，改用「文章內文第一句時間」===
+    first_para = soup.find('p')
+    if first_para:
+        text = first_para.get_text(strip=True)
+        m = re.search(r'(\d{4}[-/年]\d{1,2}[-/月]\d{1,2})', text)
+        if m:
+            try:
+                date_str = m.group(1).replace('年', '-').replace('月', '-').replace('日', '')
+                dt = datetime.strptime(date_str, '%Y-%m-%d')
                 return dt.isoformat() + "Z"
             except:
                 pass
 
-    # 4. 備援：用爬蟲時間
-    return datetime.now().isoformat() + "Z"
+    # === 步驟 5：最後備援 → 真的找不到 → 留空或用爬蟲時間（建議留空）===
+    return None  # 讓你知道「這篇沒抓到時間」
 
 # === 清理純文字 ===
 def clean_body_text(soup, classes):
