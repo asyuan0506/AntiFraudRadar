@@ -12,6 +12,6 @@ requests==2.32.3
 beautifulsoup4==4.12.2
 schedule==1.2.0
 gunicorn==21.2.0
-pillow==2.0.0
+pillow==12.0.0
 dotenv==0.9.9
 openai==2.7.1
