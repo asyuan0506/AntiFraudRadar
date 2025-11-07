@@ -57,7 +57,7 @@ def extract_pub_date(soup, domain):
                 # 過濾未來時間（避免抓到「預約發布」）
                 if dt > datetime.now(dt.tzinfo):
                     continue
-                return dt.isoformat() + "Z"
+                return dt.isoformat()
             except:
                 continue
 
@@ -69,7 +69,7 @@ def extract_pub_date(soup, domain):
             try:
                 dt = dateutil.parser.parse(dt_str, fuzzy=True)
                 if dt < datetime.now(dt.tzinfo):
-                    return dt.isoformat() + "Z"
+                    return dt.isoformat()
             except:
                 pass
 
@@ -82,7 +82,7 @@ def extract_pub_date(soup, domain):
             try:
                 date_str = m.group(1).replace('年', '-').replace('月', '-').replace('日', '')
                 dt = datetime.strptime(date_str, '%Y-%m-%d')
-                return dt.isoformat() + "Z"
+                return dt.isoformat()
             except:
                 pass
 
@@ -97,7 +97,7 @@ def extract_pub_date(soup, domain):
                 try:
                     dt = dateutil.parser.parse(text, fuzzy=True)
                     if dt.year >= 2000:
-                        return dt.isoformat() + "Z"
+                        return dt.isoformat()
                 except:
                     continue
 
@@ -108,7 +108,7 @@ def extract_pub_date(soup, domain):
             try:
                 dt = dateutil.parser.parse(tag.get_text(strip=True), fuzzy=True)
                 if dt.year >= 2000:
-                    return dt.isoformat() + "Z"
+                    return dt.isoformat()
             except:
                 pass
 
@@ -121,7 +121,7 @@ def extract_pub_date(soup, domain):
             try:
                 date_str = m.group(1).replace('年', '-').replace('月', '-').replace('日', '')
                 dt = datetime.strptime(date_str, '%Y-%m-%d')
-                return dt.isoformat() + "Z"
+                return dt.isoformat()
             except:
                 pass
 
