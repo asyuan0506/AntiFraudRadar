@@ -60,11 +60,11 @@ if __name__ == "__main__":
     print("ChatGPT Client Test")
     chatgpt_client = ChatGPTClient()
 
-    user_input = "請幫我看看這張圖片，這是我收到的簡訊內容，我想知道這是不是詐騙？"
+    user_text = "請幫我看看這張圖片，這是我收到的簡訊內容，我想知道這是不是詐騙？"
     image_path = "images/fraud_message.png"
 
     try:
-        response = chatgpt_client.generate_response(user_input=user_input, image_path=image_path)
+        response = chatgpt_client.generate_response(user_text=user_text, image_path=image_path)
         print(response)
     except Exception as e:
         print(f"Error occurred: {e}")

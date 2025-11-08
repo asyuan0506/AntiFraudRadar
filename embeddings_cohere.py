@@ -23,6 +23,8 @@ class EmbeddingModel:
         Args:
             texts: List of strings.
             input_type: "TEXT", "QUERY", "DOCUMENT"
+        Returns:
+            response: Embedding response object.
         """
         response = self.client.embed(
             input=texts,

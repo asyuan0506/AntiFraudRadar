@@ -2,6 +2,7 @@ import os, dotenv
 from flask import Flask, request, abort
 import json
 import requests
+import time
 # LINE Message API (v3)
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
@@ -31,7 +32,7 @@ def reply_with_text(reply_token, text):
         line_bot_api.reply_message_with_http_info(
             ReplyMessageRequest(
                 replyToken=reply_token,
-                messages=[TextMessage(text=text)],
+                messages=[TextMessage(text=text, quickReply=None, quoteToken=None)],
                 notificationDisabled=False
             )
         )
@@ -74,7 +75,7 @@ def handle_image_message(event): #TODO: Handle multiple images using imageSet.in
         print(f"Image Received")
 
         file_data = get_file(msg.id)
-        if file_data:
+        if file_data and isinstance(file_data, bytes):
             with open(f"images/received/{msg.id}.jpeg", "wb") as f:
                 f.write(file_data)
                 reply = chatgpt_client.generate_response(image_path=f"images/received/{msg.id}.jpeg")
@@ -96,9 +97,10 @@ def handle_audio_message(event):
         file_data = get_file(msg.id)
         max_retries = 10
         while file_data == "preparing" and max_retries > 0:
+            time.sleep(0.5)
             file_data = get_file(msg.id)
             max_retries -= 1
-        if file_data:
+        if file_data and isinstance(file_data, bytes):
             with open(f"audios/received/{msg.id}.m4a", "wb") as audio_bytes_file:
                 audio_bytes_file.write(file_data)
                 user_text = tts_client.transcribe_audio(f"audios/received/{msg.id}.m4a")
