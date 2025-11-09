@@ -2,7 +2,7 @@ import re
 import json
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import time
 import logging
 import urllib3
@@ -11,11 +11,12 @@ import os
 from urllib.parse import urljoin, urlparse
 from PIL import Image
 from io import BytesIO
-import dateutil.parser  # 新增：pip install python-dateutil
+import dateutil.parser  
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+tz_taiwan = timezone(timedelta(hours=8))
 
 # === 設定 ===
 OUTPUT_JSONL = 'scam_rag_dataset.jsonl'
@@ -24,7 +25,7 @@ os.makedirs(LOCAL_IMAGE_DIR, exist_ok=True)
 
 web_information = {
     'www.cib.npa.gov.tw': {'text': 'ed_txt', 'image': ['ed_txt'], 'source': '刑事警察局預防科'},
-    'news.tvbs.com.tw': {'text': 'article_content', 'image': ['article_content', 'img_box'], 'source': 'TVBS'},
+    'news.tvbs.com.tw': {'text': 'article_content', 'image': ['article_content', 'img_box'] , 'source': 'TVBS'},
     'udn.com': {'text': 'article-content__editor', 'image': ['article-content__cover', 'article-content__image'], 'source': '聯合新聞網'}
 }
 
@@ -315,7 +316,7 @@ def crawl_webs_to_jsonl(f):
                 "source": info['source'],
                 "title": title,
                 "publication_date": pub_date,                    # 真實發布時間
-                "crawl_timestamp": datetime.now().isoformat() + "Z",  # 爬蟲時間
+                "crawl_timestamp": datetime.now(tz_taiwan).isoformat(timespec='seconds'),  # 爬蟲時間
                 "tags": tags,
                 "body_text": body_text,
                 "images": images
