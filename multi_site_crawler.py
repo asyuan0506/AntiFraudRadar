@@ -210,7 +210,7 @@ def extract_images(soup, base_url, article_id, classes):
 
 # === 提取話術標籤 ===
 def extract_tags(text):
-    tag_patterns = ['詐騙', '投資', '網拍', '愛情', '猜猜我是誰', '檢警', '求職', '解除設定']
+    tag_patterns = ['詐騙', '投資', '網拍', '猜猜我是誰', '檢警', '求職', '解除設定']
     tags = [t for t in tag_patterns if t in text]
     return list(set(tags)) or ["詐騙", "話術"]
 
@@ -228,7 +228,7 @@ def add_cib_path(chapters):
     ])
 
 # === TVBS ===
-def add_tvbs_path(chapter, pages=1):
+def add_tvbs_path(chapter, pages=10):
     base_path = 'https://news.tvbs.com.tw/news/searchresult/網路詐騙/news/'
     for i in range(1, pages + 1):
         resp = requests.get(f'{base_path}{i}', timeout=20, verify=False)
@@ -248,7 +248,7 @@ def add_tvbs_path(chapter, pages=1):
                 chapter.append((title, url))
 
 # === 聯合新聞網 ===
-def add_udn_path(chapter, pages=2):
+def add_udn_path(chapter, pages=15):
     base = "https://udn.com/api/more"
     params = {
         "page": 1,
@@ -278,8 +278,8 @@ def add_udn_path(chapter, pages=2):
 def crawl_webs_to_jsonl(f):
     chapters = []
     add_cib_path(chapters)
-    add_tvbs_path(chapters, 2)
-    add_udn_path(chapters, 2)
+    add_tvbs_path(chapters, 10)
+    add_udn_path(chapters, 15)
     print(f"總共取得 {len(chapters)} 個文章連結進行爬取")
 
     count = 0
