@@ -11,210 +11,153 @@ import os
 from urllib.parse import urljoin, urlparse
 from PIL import Image
 from io import BytesIO
-import dateutil.parser  
+import dateutil.parser
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 tz_taiwan = timezone(timedelta(hours=8))
 
-# === 設定 ===
 OUTPUT_JSONL = 'scam_rag_dataset.jsonl'
 LOCAL_IMAGE_DIR = 'scam_images'
+CRAWLED_URLS_FILE = 'crawled_urls.txt'   
+
 os.makedirs(LOCAL_IMAGE_DIR, exist_ok=True)
+
+def load_crawled_urls():
+    if not os.path.exists(CRAWLED_URLS_FILE):
+        return set()
+    with open(CRAWLED_URLS_FILE, 'r', encoding='utf-8') as f:
+        return set(line.strip() for line in f if line.strip())
+
+def save_crawled_url(url):
+    with open(CRAWLED_URLS_FILE, 'a', encoding='utf-8') as f:
+        f.write(url + '\n')
+
+crawled_urls = load_crawled_urls()
+
+def get_latest_publication_date():
+    """讀取 jsonl 最後一筆有 publication_date 的時間"""
+    if not os.path.exists(OUTPUT_JSONL):
+        return None
+    
+    latest_dt = None
+    try:
+        with open(OUTPUT_JSONL, 'r', encoding='utf-8') as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                try:
+                    data = json.loads(line)
+                    pub_date = data.get("publication_date")
+                    if not pub_date:
+                        continue
+                    dt = dateutil.parser.isoparse(pub_date)
+                    if latest_dt is None or dt > latest_dt:
+                        latest_dt = dt
+                except:
+                    continue
+    except Exception as e:
+        logger.warning(f"讀取最新時間失敗: {e}")
+    
+    return latest_dt.astimezone(tz_taiwan) if latest_dt else None
+
+latest_pub_date = get_latest_publication_date()
+
+if latest_pub_date:
+    print(f"資料庫中最新的新聞發布時間：{latest_pub_date.strftime('%Y-%m-%d %H:%M:%S')}")
+    print("本次只會抓取「發布時間晚於此」的文章")
+else:
+    print("資料庫為空或無時間紀錄 → 首次執行，抓取全部文章")
 
 web_information = {
     'www.cib.npa.gov.tw': {'text': 'ed_txt', 'image': ['ed_txt'], 'source': '刑事警察局預防科'},
-    'news.tvbs.com.tw': {'text': 'article_content', 'image': ['article_content', 'img_box'] , 'source': 'TVBS'},
+    'news.tvbs.com.tw': {'text': 'article_content', 'image': ['article_content', 'img_box'], 'source': 'TVBS'},
     'udn.com': {'text': 'article-content__editor', 'image': ['article-content__cover', 'article-content__image'], 'source': '聯合新聞網'}
 }
 
-# 模擬 storage_path
 def get_storage_path(article_id):
-    ext = '.png'
-    filename = f"{article_id}_{uuid.uuid4().hex[:6]}{ext}"
-    return f"./{LOCAL_IMAGE_DIR}/{filename}"
+    return f"./{LOCAL_IMAGE_DIR}/{article_id}_{uuid.uuid4().hex[:6]}.png"
 
-# === 新增：動態提取發布時間 ===
 def extract_pub_date(soup, domain):
-    """
-    精準提取「發布時間」，避免抓到更新時間
-    支援：刑事局、TVBS、聯合
-    """
-    # === 步驟 1：優先抓「發布時間」meta（絕不抓 modified）===
+
     publish_meta = [
-        'meta[property="article:published_time"]',
-        'meta[name="pubdate"]',
-        'meta[property="og:published_time"]',
-        'meta[name="publishdate"]',
-        'meta[property="rnews:datePublished"]',
-        'meta[itemprop="datePublished"]'
+        'meta[property="article:published_time"]', 'meta[name="pubdate"]',
+        'meta[property="og:published_time"]', 'meta[itemprop="datePublished"]'
     ]
     for sel in publish_meta:
         tag = soup.select_one(sel)
         if tag and tag.get('content'):
             try:
                 dt = dateutil.parser.isoparse(tag['content'])
-                # 過濾未來時間（避免抓到「預約發布」）
-                if dt > datetime.now(dt.tzinfo):
-                    continue
-                return dt.isoformat()
-            except:
-                continue
-
-    # === 步驟 2：<time> 標籤 + 關鍵字過濾 ===
-    time_tag = soup.find('time')
-    if time_tag:
-        dt_str = time_tag.get('datetime') or time_tag.get_text(strip=True)
-        if dt_str and ('發布' in dt_str or '刊登' in dt_str or '發佈' in dt_str):
-            try:
-                dt = dateutil.parser.parse(dt_str, fuzzy=True)
-                if dt < datetime.now(dt.tzinfo):
+                if dt <= datetime.now(dt.tzinfo):
                     return dt.isoformat()
-            except:
-                pass
+            except: continue
 
-    # === 步驟 3：網站專屬精準選擇器 ===
     if 'cib.npa.gov.tw' in domain:
-        # 刑事局：找「發布日期：2025年1月1日」
-        text = soup.get_text()
-        m = re.search(r'發布日期[:：\s]*(\d{4}[-/年]\d{1,2}[-/月]\d{1,2})', text)
+        m = re.search(r'發布日期[:：\s]*(\d{4}[-/年]\d{1,2}[-/月]\d{1,2})', soup.get_text())
         if m:
             try:
-                date_str = m.group(1).replace('年', '-').replace('月', '-').replace('日', '')
-                dt = datetime.strptime(date_str, '%Y-%m-%d')
-                return dt.isoformat()
-            except:
-                pass
+                d = m.group(1).replace('年','-').replace('月','-').replace('日','')
+                return datetime.strptime(d, '%Y-%m-%d').isoformat()
+            except: pass
 
     elif 'tvbs.com.tw' in domain:
-        # TVBS：找 .time 或 time 標籤，且包含「小時前」以外
-        for sel in ['.time', 'time', '.date']:
-            tag = soup.select_one(sel)
-            if tag:
-                text = tag.get_text(strip=True)
-                if '小時前' in text or '分鐘前' in text or '剛剛' in text:
-                    continue
-                try:
-                    dt = dateutil.parser.parse(text, fuzzy=True)
-                    if dt.year >= 2000:
-                        return dt.isoformat()
-                except:
-                    continue
+        tag = soup.select_one('.time') or soup.select_one('time')
+        if tag and not any(x in tag.get_text() for x in ['小時前','分鐘前','剛剛']):
+            try: return dateutil.parser.parse(tag.get_text(), fuzzy=True).isoformat()
+            except: pass
 
     elif 'udn.com' in domain:
-        # 聯合：找 .article-content__time，且不是「更新」
         tag = soup.select_one('.article-content__time')
         if tag and '更新' not in tag.get_text():
-            try:
-                dt = dateutil.parser.parse(tag.get_text(strip=True), fuzzy=True)
-                if dt.year >= 2000:
-                    return dt.isoformat()
-            except:
-                pass
+            try: return dateutil.parser.parse(tag.get_text(), fuzzy=True).isoformat()
+            except: pass
 
-    # === 步驟 4：備援 → 絕對不用 now()，改用「文章內文第一句時間」===
-    first_para = soup.find('p')
-    if first_para:
-        text = first_para.get_text(strip=True)
-        m = re.search(r'(\d{4}[-/年]\d{1,2}[-/月]\d{1,2})', text)
-        if m:
-            try:
-                date_str = m.group(1).replace('年', '-').replace('月', '-').replace('日', '')
-                dt = datetime.strptime(date_str, '%Y-%m-%d')
-                return dt.isoformat()
-            except:
-                pass
+    return None
 
-    # === 步驟 5：最後備援 → 真的找不到 → 留空或用爬蟲時間（建議留空）===
-    return None  # 讓你知道「這篇沒抓到時間」
-
-# === 清理純文字 ===
 def clean_body_text(soup, classes):
     container = soup.find('main') or soup.find('body')
-    if not container:
-        return ""
+    if not container: return ""
     tags = container.find(class_=classes) if isinstance(classes, str) else container
-    if not tags:
-        return ""
-
-    # 移除廣告、腳本
-    for tag in tags.select('div, script, iframe, aside'):
-        tag.decompose()
-
+    if not tags: return ""
+    for bad in tags.select('script, iframe, nav, header, footer, aside, div.ad'): bad.decompose()
     text = tags.get_text(separator='\n', strip=True)
-    lines = [line.strip() for line in text.split('\n') if len(line.strip()) >= 5]
-    return '\n\n'.join(lines)
+    return '\n\n'.join(l.strip() for l in text.split('\n') if len(l.strip()) >= 5)
 
-# === 提取 + 下載圖片 ===
 def extract_images(soup, base_url, article_id, classes):
     images = []
     container = soup.find('main') or soup.find('body')
-    if not container:
-        return images
-
-    target_areas = []
+    if not container: return images
+    areas = []
     if isinstance(classes, list):
         for c in classes:
-            area = container.find(class_=c)
-            if area:
-                target_areas.append(area)
+            a = container.find(class_=c)
+            if a: areas.append(a)
     else:
-        area = container.find(class_=classes)
-        if area:
-            target_areas.append(area)
+        a = container.find(class_=classes)
+        if a: areas.append(a)
 
-    for area in target_areas:
-        # 移除 iframe, a
-        for tag in area.select('iframe, a'):
-            tag.decompose()
-
-        for img_tag in area.find_all('img'):
-            src = img_tag.get('data-original') or img_tag.get('data-src') or img_tag.get('src')
-            if not src:
-                continue
-            original_url = urljoin(base_url, src)
-            if original_url in [img['original_url'] for img in images]:
-                continue
-
-            alt_text = img_tag.get('alt', '').strip()
-            caption = ''
-            parent = img_tag.find_parent(['figure', 'div'])
-            if parent:
-                figcaption = parent.find(['figcaption', 'span'])
-                if figcaption:
-                    caption = figcaption.get_text(strip=True)
-
-            # 下載圖片
-            storage_path = ""
+    for area in areas:
+        for img in area.find_all('img'):
+            src = img.get('data-original') or img.get('data-src') or img.get('src')
+            if not src: continue
+            url = urljoin(base_url, src)
+            if any(i['original_url'] == url for i in images): continue
             try:
-                headers = {'User-Agent': 'Mozilla/5.0'}
-                img_resp = requests.get(original_url, headers=headers, timeout=15, verify=False)
-                if img_resp.status_code == 200 and 'image' in img_resp.headers.get('Content-Type', ''):
-                    storage_path = get_storage_path(article_id)
-                    local_path = os.path.relpath(storage_path, '.')
-                    img = Image.open(BytesIO(img_resp.content))
-                    img.save(local_path)
-                    logger.info(f"下載圖片: {local_path}")
-            except Exception as e:
-                logger.warning(f"圖片下載失敗 {original_url}: {e}")
-                continue
-
-            images.append({
-                "original_url": original_url,
-                "storage_path": storage_path,
-                "caption": caption or alt_text,
-                "alt_text": alt_text
-            })
+                r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=15, verify=False)
+                if r.status_code == 200 and 'image' in r.headers.get('Content-Type',''):
+                    path = get_storage_path(article_id)
+                    Image.open(BytesIO(r.content)).save(os.path.relpath(path, '.'))
+                    images.append({"original_url": url, "storage_path": path, "caption": img.get('alt',''), "alt_text": img.get('alt','')})
+            except: continue
     return images
 
-# === 提取話術標籤 ===
 def extract_tags(text):
-    tag_patterns = ['詐騙', '投資', '網拍', '猜猜我是誰', '檢警', '求職', '解除設定']
-    tags = [t for t in tag_patterns if t in text]
-    return list(set(tags)) or ["詐騙", "話術"]
+    tags = ['詐騙','投資','網拍','愛情','猜猜我是誰','檢警','求職','解除設定','ATM','人頭帳戶','虛擬貨幣','LINE','轉帳']
+    return list(set(t for t in tags if t in text)) or ['詐騙']
 
-# === 刑事局章節 ===
+
 def add_cib_path(chapters):
     chapters.extend([
         ("假網拍詐騙", "https://www.cib.npa.gov.tw/ch/app/data/view?module=wg116&id=1909&serno=7e614f6f-df9b-4ae2-8293-ed384fb1a470"),
@@ -224,123 +167,98 @@ def add_cib_path(chapters):
         ("猜猜我是誰", "https://www.cib.npa.gov.tw/ch/app/data/view?module=wg116&id=1909&serno=4f04dab6-3ca5-4139-a94e-66be03b62ba3"),
         ("假冒公務員", "https://www.cib.npa.gov.tw/ch/app/data/view?module=wg116&id=1909&serno=b7cf505d-f709-4885-b06b-d29b092ce04f"),
         ("假求職", "https://www.cib.npa.gov.tw/ch/app/data/view?module=wg116&id=1909&serno=87a85079-c42f-48cb-9506-14e08c912a39"),
-        ("二次詐騙", "https://www.cib.npa.gov.tw/ch/app/news/view?module=news&id=1887&serno=b434cf1c-d6fa-4e9c-9f55-6d8fe11e154d")
     ])
 
-# === TVBS ===
-def add_tvbs_path(chapter, pages=15):
-    base_path = 'https://news.tvbs.com.tw/news/searchresult/網路詐騙/news/'
-    for i in range(1, pages + 1):
-        resp = requests.get(f'{base_path}{i}', timeout=20, verify=False)
-        time.sleep(0.5)
-        if resp.status_code != 200:
-            continue
-        soup = BeautifulSoup(resp.text, 'html.parser')
-        news_list = soup.find(class_='news_list')
-        if not news_list:
-            continue
-        items = news_list.find_all('li')
-        for item in items:
-            a_tag = item.find('a')
-            if a_tag and 'href' in a_tag.attrs:
-                url = urljoin(base_path, a_tag['href'])
-                title = a_tag.get_text(strip=True)
-                chapter.append((title, url))
-
-# === 聯合新聞網 ===
-def add_udn_path(chapter, pages=15):
-    base = "https://udn.com/api/more"
-    params = {
-        "page": 1,
-        "id": "search:網路詐騙",
-        "channelId": 2,
-        "type": "searchword",
-        "last_page": 27
-    }
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
-    }
-    for i in range(1, pages + 1):
-        params['page'] = i
+def add_tvbs_path(chapters, pages=15):
+    base = 'https://news.tvbs.com.tw/news/searchresult/網路詐騙/news/'
+    for i in range(1, pages+1):
         try:
-            resp = requests.get(base, params=params, headers=headers, timeout=20)
-            resp.raise_for_status()
-            data = resp.json()
-            for news in data.get('lists', []):
-                url = news.get('titleLink')
-                title = news.get('title')
-                if url and title:
-                    chapter.append((title, url))
-        except Exception as e:
-            logger.warning(f"UDN 頁面 {i} 失敗: {e}")
+            r = requests.get(f'{base}{i}', timeout=20, verify=False)
+            time.sleep(0.5)
+            soup = BeautifulSoup(r.text, 'html.parser')
+            for li in soup.select('.news_list li a'):
+                if li.get('href'):
+                    chapters.append((li.get_text(strip=True), urljoin(base, li['href'])))
+        except: continue
 
-# === 主爬蟲 ===
-def crawl_webs_to_jsonl(f):
+def add_udn_path(chapters, pages=15):
+    for p in range(1, pages+1):
+        try:
+            r = requests.get("https://udn.com/api/more", params={
+                "page": p, "id": "search:網路詐騙", "channelId": 2, "type": "searchword"
+            }, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
+            r.raise_for_status()
+            for item in r.json().get('lists', []):
+                if item.get('titleLink') and item.get('title'):
+                    chapters.append((item['title'], item['titleLink']))
+        except: continue
+
+
+def crawl_webs_to_jsonl():
     chapters = []
     add_cib_path(chapters)
-    add_tvbs_path(chapters, 15)
-    add_udn_path(chapters, 15)
-    print(f"總共取得 {len(chapters)} 個文章連結進行爬取")
+    add_tvbs_path(chapters, pages=15)
+    add_udn_path(chapters, pages=15)
+    print(f"總共收集到 {len(chapters)} 個候選連結")
 
-    count = 0
-    for chap_title, url in chapters:
-        try:
-            resp = requests.get(url, timeout=20, verify=False)
-            time.sleep(0.5)
-            if resp.status_code != 200:
-                continue
-            soup = BeautifulSoup(resp.text, 'html.parser')
+    new_count = skipped_old = skipped_dup = 0
+    mode = 'a' if os.path.exists(OUTPUT_JSONL) else 'w'
 
-            domain = urlparse(url).netloc
-            if domain not in web_information:
-                continue
-            info = web_information[domain]
-
-            article_id = f"{domain.split('.')[0]}_{uuid.uuid4().hex[:8]}"
-            title = soup.find('title').get_text(strip=True) if soup.find('title') else chap_title
-
-            # 正確提取發布時間
-            pub_date = extract_pub_date(soup, domain)
-
-            body_text = clean_body_text(soup, info['text'])
-            if len(body_text) < 50:
+    with open(OUTPUT_JSONL, mode, encoding='utf-8') as f:
+        for title_hint, url in chapters:
+            if url in crawled_urls:
+                skipped_dup += 1
                 continue
 
-            images = extract_images(soup, url, article_id, info['image'])
-            tags = extract_tags(body_text)
+            try:
+                r = requests.get(url, timeout=20, verify=False)
+                time.sleep(0.6)
+                if r.status_code != 200: continue
 
-            article = {
-                "iteration": count + 1,
-                "id": article_id,
-                "url": url,
-                "source": info['source'],
-                "title": title,
-                "publication_date": pub_date,                    # 真實發布時間
-                "crawl_timestamp": datetime.now(tz_taiwan).isoformat(timespec='seconds'),  # 爬蟲時間
-                "tags": tags,
-                "body_text": body_text,
-                "images": images
-            }
-            f.write(json.dumps(article, ensure_ascii=False) + '\n')
-            print(f"{count + 1}. {title[:50]}...（發布: {pub_date[:10]}，{len(images)} 圖）")
-            count += 1
-        except Exception as e:
-            logger.error(f"錯誤 {url}: {e}")
-    return count
+                soup = BeautifulSoup(r.text, 'html.parser')
+                domain = urlparse(url).netloc
+                if domain not in web_information: continue
+                info = web_information[domain]
 
-# === 主執行 ===
-def run_all_to_jsonl():
-    with open(OUTPUT_JSONL, 'w', encoding='utf-8') as f:
-        print("開始多來源爬蟲 → 輸出 RAG 標準 JSONL（含正確時間）")
-        total = crawl_webs_to_jsonl(f)
-        print(f"\n{'='*60}")
-        print(f"完成！共生成 {total} 篇 JSONL 文章")
-        print(f"publication_date = 文章真實發布時間")
-        print(f"crawl_timestamp = 爬蟲執行時間")
-        print(f"檔案: {OUTPUT_JSONL}")
-        print(f"圖片儲存: {LOCAL_IMAGE_DIR}/")
-        print(f"{'='*60}")
+                pub_date_str = extract_pub_date(soup, domain)
+                if not pub_date_str:
+                    continue  
+
+                pub_date = dateutil.parser.isoparse(pub_date_str).astimezone(tz_taiwan)
+
+                if latest_pub_date and pub_date <= latest_pub_date:
+                    skipped_old += 1
+                    continue
+
+                body = clean_body_text(soup, info['text'])
+                if len(body) < 80: continue
+
+                article_id = f"{domain.split('.')[0]}_{uuid.uuid4().hex[:8]}"
+                article = {
+                    "id": article_id,
+                    "url": url,
+                    "source": info['source'],
+                    "title": soup.find('title').get_text(strip=True) if soup.find('title') else title_hint,
+                    "publication_date": pub_date_str,
+                    "crawl_timestamp": datetime.now(tz_taiwan).isoformat(timespec='seconds'),
+                    "tags": extract_tags(body),
+                    "body_text": body,
+                    "images": extract_images(soup, url, article_id, info['image'])
+                }
+
+                f.write(json.dumps(article, ensure_ascii=False) + '\n')
+                save_crawled_url(url)
+                new_count += 1
+                print(f"新增 → {article['title'][:60]} ({pub_date_str[:10]})")
+
+            except Exception as e:
+                logger.error(f"失敗 {url}: {e}")
+
+    print(f"\n完成！本次新增 {new_count} 篇 | 跳過舊文 {skipped_old} 篇 | 跳過重複 {skipped_dup} 篇")
+    return new_count
+
 
 if __name__ == "__main__":
-    run_all_to_jsonl()
-    print("\nRAG 資料集已就緒！時間正確，可直接用於訓練與過濾")
+    print("啟動詐騙新聞增量爬蟲（以資料庫最新發布時間為準）\n")
+    crawl_webs_to_jsonl()
+    print("\n執行完畢！下次執行會自動接續最新時間")
