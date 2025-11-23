@@ -254,7 +254,7 @@ def crawl_webs_to_jsonl():
             except Exception as e:
                 logger.error(f"失敗 {url}: {e}")
 
-    print(f"\n完成！本次新增 {new_count} 篇 | 跳過舊文 {skipped_old} 篇 | 跳過重複 {skipped_dup} 篇")
+    print(f"\n完成！本次新增 {new_count} 篇")
     return new_count
 
 
