@@ -228,7 +228,7 @@ def add_cib_path(chapters):
     ])
 
 # === TVBS ===
-def add_tvbs_path(chapter, pages=10):
+def add_tvbs_path(chapter, pages=15):
     base_path = 'https://news.tvbs.com.tw/news/searchresult/網路詐騙/news/'
     for i in range(1, pages + 1):
         resp = requests.get(f'{base_path}{i}', timeout=20, verify=False)
@@ -278,7 +278,7 @@ def add_udn_path(chapter, pages=15):
 def crawl_webs_to_jsonl(f):
     chapters = []
     add_cib_path(chapters)
-    add_tvbs_path(chapters, 10)
+    add_tvbs_path(chapters, 15)
     add_udn_path(chapters, 15)
     print(f"總共取得 {len(chapters)} 個文章連結進行爬取")
 
