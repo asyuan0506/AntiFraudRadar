@@ -76,9 +76,12 @@ def handle_image_message(event): #TODO: Handle multiple images using imageSet.in
 
         file_data = get_file(msg.id)
         if file_data and isinstance(file_data, bytes):
-            with open(f"images/received/{msg.id}.jpeg", "wb") as f:
+            path = "images/received"
+            if not os.path.isdir(path):
+                os.mkdir(path)
+            with open(f"{path}/{msg.id}.jpeg", "wb") as f:
                 f.write(file_data)
-                reply = chatgpt_client.generate_response(image_path=f"images/received/{msg.id}.jpeg")
+                reply = chatgpt_client.generate_response(image_path=f"{path}/{msg.id}.jpeg")
         else:
             reply = "Sorry, I couldn't process your image."
 
@@ -101,9 +104,12 @@ def handle_audio_message(event):
             file_data = get_file(msg.id)
             max_retries -= 1
         if file_data and isinstance(file_data, bytes):
-            with open(f"audios/received/{msg.id}.m4a", "wb") as audio_bytes_file:
+            path = "audios/received"
+            if not os.path.isdir(path):
+                os.mkdir(path)
+            with open(f"{path}/{msg.id}.m4a", "wb") as audio_bytes_file:
                 audio_bytes_file.write(file_data)
-                user_text = tts_client.transcribe_audio(f"audios/received/{msg.id}.m4a")
+                user_text = tts_client.transcribe_audio(f"{path}/{msg.id}.m4a")
                 reply = chatgpt_client.generate_response(user_text=user_text)
         else:
             reply = "Sorry, I couldn't process your audio message."
