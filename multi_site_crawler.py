@@ -72,7 +72,7 @@ else:
 
 web_information = {
     'www.cib.npa.gov.tw': {'text': 'ed_txt', 'image': ['ed_txt'], 'source': '刑事警察局預防科'},
-    'news.tvbs.com.tw': {'text': 'article_content', 'image': ['article_content', 'img_box'], 'source': 'TVBS'},
+    'news.tvbs.com.tw': {'text': 'article_content', 'image': ['article_content'], 'source': 'TVBS'},
     'udn.com': {'text': 'article-content__editor', 'image': ['article-content__cover', 'article-content__image'], 'source': '聯合新聞網'}
 }
 
