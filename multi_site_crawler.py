@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 tz_taiwan = timezone(timedelta(hours=8))
 
 OUTPUT_JSONL = 'scam_rag_dataset.jsonl'
-LOCAL_IMAGE_DIR = 'images/scam_images'
+LOCAL_IMAGE_DIR = 'images/news_images'
 CRAWLED_URLS_FILE = 'crawled_urls.txt'   
 
 os.makedirs(LOCAL_IMAGE_DIR, exist_ok=True)

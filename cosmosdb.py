@@ -20,11 +20,22 @@ class CosmosDBClient:
         self.containerName = os.getenv("CONFIGURATION__AZURECOSMOSDB__CONTAINERNAME", "products")
         self.container = self.database.get_container_client(self.containerName)
 
-    def upsert_news_item(self, jsonl_parser: JSONLParser, index: int): #TODO: Dedicate Function for News Item
+    def get_lastest_upserted_item_index(self):
+        query_text = '''SELECT VALUE MAX(c.json_index) FROM c'''
+        items = list(self.container.query_items(
+            query=query_text,
+            enable_cross_partition_query=True
+        ))
+        if items and items[0]:
+            return int(items[0])
+        return 0
+
+    def upsert_news_item(self, jsonl_parser: JSONLParser, index: int): 
         """
         Upsert a news item in the CosmosDB container from the parsed JSONL data[index].
         """
         item = {}
+        item["json_index"] = index 
         item["news_id"] = jsonl_parser.get_article_object(index, "id")
         item["url"] = jsonl_parser.get_article_object(index, "url")
         item["source"] = jsonl_parser.get_article_object(index, "source")
@@ -43,7 +54,7 @@ class CosmosDBClient:
 
         return "OK"
     
-    def upsert_text_item(self, item: dict, body_text: str): #TODO: Dedicate Function for News Text Chunk Item
+    def upsert_text_item(self, item: dict, body_text: str): 
         item["type"] = "text_chunk"
         try:
             text_chunks = split_text_into_chunks(body_text, chunk_size=1000, chunk_overlap=200)
@@ -73,7 +84,7 @@ class CosmosDBClient:
             
         return "OK"
 
-    def upsert_image_item(self, item: dict, images: list): #TODO: Dedicate Function for News Image Item
+    def upsert_image_item(self, item: dict, images: list): 
         item["type"] = "image"
         for image in images:
             item["id"] = str(uuid.uuid4())
@@ -90,8 +101,16 @@ class CosmosDBClient:
         
         return "OK"
     
-    def query_news_by_vector(self, vector):
-        query_text = f'''SELECT TOP 5 c.url, c.source, c.title, c.publication_date, c.content, c.image_url, c.caption, c.alt_text, VectorDistance(c.content_vector, {vector}) AS SimilarityScore\
+    def query_news_by_vector(self, vector, k=5):
+        """
+        Query news items similar to the given embedding vector.
+        Args:
+            vector: The embedding vector to query.
+            k: Number of top similar items to retrieve.
+            Returns:
+            List of news items similar to the input vector.
+        """
+        query_text = f'''SELECT TOP {k} c.url, c.source, c.title, c.publication_date, c.content, c.image_url, c.caption, c.alt_text, VectorDistance(c.content_vector, {vector}) AS SimilarityScore\
                         FROM c\
                         ORDER BY VectorDistance(c.content_vector, {vector})'''
         results = self.container.query_items(
@@ -101,8 +120,16 @@ class CosmosDBClient:
         )
         return list(results)
     
-    def query_news_images_by_image_vector(self, image_vector):
-        query_text = f'''SELECT TOP 3 c.news_id, c.image_url, c.caption, c.alt_text, VectorDistance(c.content_vector, {image_vector}) AS SimilarityScore\
+    def query_news_images_by_image_vector(self, image_vector, k=3):
+        """
+        Query news images similar to the given image vector.
+        Args:
+            image_vector: The embedding vector of the image to query.
+            k: Number of top similar items to retrieve.
+        Returns:
+            List of news image items similar to the input image vector.
+        """
+        query_text = f'''SELECT TOP {k} c.news_id, c.image_url, c.caption, c.alt_text, VectorDistance(c.content_vector, {image_vector}) AS SimilarityScore\
                         FROM c\
                         WHERE c.type = "image"\
                         ORDER BY VectorDistance(c.content_vector, {image_vector})'''

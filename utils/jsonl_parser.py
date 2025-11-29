@@ -21,6 +21,9 @@ class JSONLParser:
             raise KeyError(f"Key '{key}' not found in article.")
         return self.articles[index][key]
     
+    def get_articles_length(self):
+        return len(self.articles)
+    
 if __name__ == "__main__":
     parser = JSONLParser("scam_rag_dataset.jsonl")
     parser.parse()

@@ -18,7 +18,7 @@ class EmbeddingModel:
             credential=AzureKeyCredential(str(EmbeddingModel.api_key)),
         )
 
-    def get_text_embedding(self, texts, input_type="DOCUMENT"): 
+    def get_text_embedding(self, texts:list[str], input_type="DOCUMENT"): 
         """
         Args:
             texts: List of strings.
