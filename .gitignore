@@ -209,6 +209,7 @@ __marimo__/
 # Images
 images/received/*
 images/news_images/*
+images/scam_images/*
 
 # Audios
 audios/received/*

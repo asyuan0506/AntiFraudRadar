@@ -59,8 +59,11 @@ if __name__ == "__main__":
     texts = [
         "The quick brown fox jumps over the lazy dog.",
         "A fast dark-colored fox leaps above a sleepy canine.",
-        "測試中文",
+        "A dog is barking loudly at the mailman.",
+        "有一隻狗在對郵差大聲吠叫"
     ]
+    print("Original Texts:", texts)
+    print("Text Embeddings(Type: Document):")
     response = embedding_model.get_text_embedding(texts)
     for item in response.data:
         length = len(item.embedding)
@@ -68,16 +71,23 @@ if __name__ == "__main__":
             f"data[{item.index}]: length={length}, [{item.embedding[0]}, {item.embedding[1]}, "
             f"..., {item.embedding[length-2]}, {item.embedding[length-1]}]"
         )
+
     query_texts = [
-        "What animal is sleeping?",
+        "Which animal is sleeping?",
+        "哪隻動物在睡覺?",
+        "Is there a dog?",
+        "有一隻狗嗎?"
     ]
+    print("Query Texts:", query_texts)
+    print("Text Embeddings(Type: Query):")
     query_response = embedding_model.get_text_embedding(query_texts, input_type="QUERY")
-    for item in response.data:
+    for item in query_response.data:
         length = len(item.embedding)
         print(
             f"data[{item.index}]: length={length}, [{item.embedding[0]}, {item.embedding[1]}, "
             f"..., {item.embedding[length-2]}, {item.embedding[length-1]}]"
         )
+
     # Calculate cosine similarity between the first query and all documents
     for query_item in query_response.data:
         for doc_item in response.data:
@@ -85,13 +95,13 @@ if __name__ == "__main__":
             print(f"Cosine similarity between query[{query_item.index}] and doc[{doc_item.index}]: {similarity}")
    
     # Test image embeddings
-    # response = embedding_model.get_image_embedding("images/fraud_message.png")
-    # for item in response.data:
-    #     length = len(item.embedding)
-    #     print(
-    #         f"data[{item.index}]: length={length}, [{item.embedding[0]}, {item.embedding[1]}, "
-    #         f"..., {item.embedding[length-2]}, {item.embedding[length-1]}]"
-    #     )
+    response = embedding_model.get_image_embedding("images/fraud_message.png")
+    for item in response.data:
+        length = len(item.embedding)
+        print(
+            f"data[{item.index}]: length={length}, [{item.embedding[0]}, {item.embedding[1]}, "
+            f"..., {item.embedding[length-2]}, {item.embedding[length-1]}]"
+        )
 
     # Test image encoding and decoding
     # encoded_image = encode_image("images/fraud_message.png")
