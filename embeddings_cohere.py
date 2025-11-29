@@ -8,7 +8,7 @@ from utils.image_utils import encode_image, decode_image
 dotenv.load_dotenv()
 
 class EmbeddingModel:
-    endpoint = "https://testing1ai1foundry.services.ai.azure.com/models"
+    endpoint = "https://ntpufsl-antifraudradartest.services.ai.azure.com/models"
     deployment_name = "embed-v-4-0" # Support Language: en, fr, es, it, de, pt-br, ja, ko, zh-cn, ar
     api_key = os.getenv("COHERE_EMBEDDING_API_KEY")
 

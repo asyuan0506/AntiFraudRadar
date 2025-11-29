@@ -9,7 +9,6 @@ from utils.jsonl_parser import JSONLParser
 from embeddings_cohere import EmbeddingModel
 from utils.text_splitter import split_text_into_chunks
 import uuid
-import json
 
 class CosmosDBClient:
     def __init__(self):
@@ -20,22 +19,27 @@ class CosmosDBClient:
         self.containerName = os.getenv("CONFIGURATION__AZURECOSMOSDB__CONTAINERNAME", "products")
         self.container = self.database.get_container_client(self.containerName)
 
-    def get_lastest_upserted_item_index(self):
-        query_text = '''SELECT VALUE MAX(c.json_index) FROM c'''
+    def get_latest_upserted_item_time(self):
+        query_text = '''SELECT TOP 1 c.publication_date\
+                        FROM c\
+                        ORDER BY c.publication_date DESC'''
         items = list(self.container.query_items(
             query=query_text,
             enable_cross_partition_query=True
         ))
-        if items and items[0]:
-            return int(items[0])
-        return 0
+
+        import dateutil.parser 
+        from datetime import timezone, timedelta
+        latest_time = "1970-01-01T00:00:00Z"
+        if len(items) > 0:
+            latest_time = items[0].get("publication_date", "1970-01-01T00:00:00Z")
+        return dateutil.parser.isoparse(latest_time).astimezone(timezone(timedelta(hours=8)))
 
     def upsert_news_item(self, jsonl_parser: JSONLParser, index: int): 
         """
         Upsert a news item in the CosmosDB container from the parsed JSONL data[index].
         """
         item = {}
-        item["json_index"] = index 
         item["news_id"] = jsonl_parser.get_article_object(index, "id")
         item["url"] = jsonl_parser.get_article_object(index, "url")
         item["source"] = jsonl_parser.get_article_object(index, "source")

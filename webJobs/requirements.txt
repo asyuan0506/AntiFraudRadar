@@ -1,0 +1,13 @@
+azure-ai-inference==1.0.0b9
+azure-common==1.1.28
+azure-core==1.36.0
+azure-cosmos==4.7.0
+azure-identity==1.19.0
+langchain-text-splitters==1.0.0
+numpy==2.3.4
+requests==2.32.3
+beautifulsoup4==4.12.2
+pillow==12.0.0
+python-dotenv==1.1.1
+python-dateutil==2.9.0.post0
+urllib3==2.5.0
