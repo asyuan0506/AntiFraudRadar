@@ -3,7 +3,7 @@ from azure.ai.inference import EmbeddingsClient
 from azure.ai.inference.models import ImageEmbeddingInput, EmbeddingInputType
 from azure.core.credentials import AzureKeyCredential
 import numpy as np
-from utils.image_utils import encode_image, decode_image
+from image_utils import encode_image, decode_image
 
 dotenv.load_dotenv()
 

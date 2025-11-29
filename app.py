@@ -14,7 +14,7 @@ from tts_integration import TTSClient
 from embeddings_cohere import EmbeddingModel
 from cosmosdb import CosmosDBClient
 from utils.jsonl_parser import JSONLParser
-import multi_site_crawler
+# import multi_site_crawler
 
 app = Flask(__name__)
 print("Starting ChatGPT Client...")
@@ -121,7 +121,7 @@ def handle_audio_message(event):
                 os.mkdir(path)
             with open(f"{path}/{msg.id}.m4a", "wb") as audio_bytes_file:
                 audio_bytes_file.write(file_data)
-                user_text = tts_client.transcribe_audio(f"{path}/{msg.id}.m4a")
+                user_text = tts_client.transcribe_audio(f"{path}/{msg.id}.m4a")["text"]
                 retrieved_context = retrive_content_by_text(user_text)
                 reply = chatgpt_client.generate_response(user_text=user_text, retrieved_context=retrieved_context, mode="AUDIO")
             os.remove(f"{path}/{msg.id}.m4a")
@@ -181,28 +181,28 @@ def retrive_content_by_image(image_path: str):
     return retrieved_context
 
 def crawl_and_store_news():
-    while True:
-        print("Crawling news websites...")
-        latest_time = cosmosdb_client.get_latest_upserted_item_time()
-        # multi_site_crawler.crawl_webs_to_jsonl(latest_time)
-        jsonl_parser = JSONLParser("scam_rag_dataset.jsonl")
-        jsonl_parser.parse()
+    # while True:
+    print("Crawling news websites...")
+    latest_time = cosmosdb_client.get_latest_upserted_item_time()
+    # multi_site_crawler.crawl_webs_to_jsonl(latest_time)
+    jsonl_parser = JSONLParser("scam_rag_dataset.jsonl")
+    jsonl_parser.parse()
 
-        num_items = jsonl_parser.get_articles_length()
-        print(f"Crawled {num_items} news items. Storing to CosmosDB...")
-        for index in range(num_items):
-            result = cosmosdb_client.upsert_news_item(jsonl_parser, index)
-            if result != "OK":
-                print(f"Error upserting news item at index {index}: {result}")
-        print("Finished storing news items to CosmosDB.")
-        print("Removing images folder...")
-        os.system("rm -rf images/news_images/*")
-        print(f"Sleeping for {crawl_interval} seconds...")
-        time.sleep(crawl_interval)
+    num_items = jsonl_parser.get_articles_length()
+    print(f"Crawled {num_items} news items. Storing to CosmosDB...")
+    for index in range(num_items):
+        result = cosmosdb_client.upsert_news_item(jsonl_parser, index)
+        if result != "OK":
+            print(f"Error upserting news item at index {index}: {result}")
+    print("Finished storing news items to CosmosDB.")
+    print("Removing images folder...")
+    os.system("rm -rf images/news_images/*")
+    print(f"Sleeping for {crawl_interval} seconds...")
+    # time.sleep(crawl_interval)
 
 if __name__ == "__main__":
     try:
-        threading.Thread(target=crawl_and_store_news, daemon=True).start()
+        # threading.Thread(target=crawl_and_store_news, daemon=True).start() # Deploy as WebJob
         app.run()
     except Exception as e:
         print(f"Error occured: {e}")
