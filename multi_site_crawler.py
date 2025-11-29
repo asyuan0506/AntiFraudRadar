@@ -139,6 +139,8 @@ def extract_images(soup, base_url, article_id, classes):
         if a: areas.append(a)
 
     for area in areas:
+        for tag in area(['iframe', 'a']):
+            tag.decompose()
         for img in area.find_all('img'):
             src = img.get('data-original') or img.get('data-src') or img.get('src')
             if not src: continue
