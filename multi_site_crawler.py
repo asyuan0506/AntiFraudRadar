@@ -194,7 +194,7 @@ def add_udn_path(chapters, pages=15):
         except: continue
 
 
-def crawl_webs_to_jsonl():
+def crawl_webs_to_jsonl(latest_pub_date=latest_pub_date):
     chapters = []
     add_cib_path(chapters)
     add_tvbs_path(chapters, pages=15)

@@ -93,6 +93,7 @@ def handle_image_message(event): #TODO: Handle multiple images using imageSet.in
                 f.write(file_data)
                 retrieved_context = retrive_content_by_image(f"{path}/{msg.id}.jpeg")
                 reply = chatgpt_client.generate_response(image_path=f"{path}/{msg.id}.jpeg", retrieved_context=retrieved_context, mode="IMAGE")
+            os.remove(f"{path}/{msg.id}.jpeg")
         else:
             reply = "Sorry, I couldn't process your image."
 
@@ -123,6 +124,7 @@ def handle_audio_message(event):
                 user_text = tts_client.transcribe_audio(f"{path}/{msg.id}.m4a")
                 retrieved_context = retrive_content_by_text(user_text)
                 reply = chatgpt_client.generate_response(user_text=user_text, retrieved_context=retrieved_context, mode="AUDIO")
+            os.remove(f"{path}/{msg.id}.m4a")
         else:
             reply = "Sorry, I couldn't process your audio message."
         # Reply message
@@ -181,14 +183,14 @@ def retrive_content_by_image(image_path: str):
 def crawl_and_store_news():
     while True:
         print("Crawling news websites...")
-        multi_site_crawler.crawl_webs_to_jsonl()
+        latest_time = cosmosdb_client.get_latest_upserted_item_time()
+        # multi_site_crawler.crawl_webs_to_jsonl(latest_time)
         jsonl_parser = JSONLParser("scam_rag_dataset.jsonl")
         jsonl_parser.parse()
 
-        last_index = cosmosdb_client.get_lastest_upserted_item_index()
         num_items = jsonl_parser.get_articles_length()
         print(f"Crawled {num_items} news items. Storing to CosmosDB...")
-        for index in range(last_index + 1, num_items):
+        for index in range(num_items):
             result = cosmosdb_client.upsert_news_item(jsonl_parser, index)
             if result != "OK":
                 print(f"Error upserting news item at index {index}: {result}")

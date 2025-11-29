@@ -19,7 +19,7 @@ class ChatGPTClient:
             retrieved_context (str, optional): Additional context to provide to the model.
             mode (str): Mode of operation, either "TEXT" or "IMAGE" or "AUDIO".
         """
-        instructions = "你是一位防詐騙專家，你要根據使用者的輸入提供有用的建議和資訊。你要讓你的回答簡潔。若與防詐騙無關，請禮貌地告知使用者你只能提供防詐騙相關的協助。"
+        instructions = "你是一位防詐騙專家，你要根據使用者的輸入提供有用的建議和資訊。你要讓你的回答簡潔。若與防詐騙無關，請禮貌地告知使用者你只能提供防詐騙相關的協助。此外，這是單輪對話。"
         if mode == "IMAGE":
             instructions += " 使用者會上傳圖片"
         elif mode == "AUDIO":
@@ -37,7 +37,7 @@ class ChatGPTClient:
 
     def _generate_input(self, user_input, image_path=None, retrieved_context=None): #TODO: Put similar chunks in
         input_template = f"""
-            請根據以下相關資訊來回答問題。此外，這是單輪對話。
+            請根據以下相關資訊來回答問題:
             --- 相關資訊 ---
             {retrieved_context}
             ---
