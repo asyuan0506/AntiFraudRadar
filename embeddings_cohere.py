@@ -4,6 +4,7 @@ from azure.ai.inference.models import ImageEmbeddingInput, EmbeddingInputType
 from azure.core.credentials import AzureKeyCredential
 import numpy as np
 from utils.image_utils import encode_image, decode_image
+import time, random # For exponential backoff
 
 dotenv.load_dotenv()
 
@@ -17,6 +18,7 @@ class EmbeddingModel:
             endpoint=EmbeddingModel.endpoint,
             credential=AzureKeyCredential(str(EmbeddingModel.api_key)),
         )
+        self.max_retries = 6
 
     def get_text_embedding(self, texts:list[str], input_type="DOCUMENT"): 
         """
@@ -26,11 +28,18 @@ class EmbeddingModel:
         Returns:
             response: Embedding response object.
         """
-        response = self.client.embed(
-            input=texts,
-            input_type=EmbeddingInputType[input_type],
-            model=self.deployment_name
-        )
+        for attempt in range(self.max_retries):
+            try:
+                response = self.client.embed(
+                    input=texts,
+                    input_type=EmbeddingInputType[input_type],
+                    model=self.deployment_name
+                )
+                break
+            except Exception as e:
+                if not self._retry_exponential_backoff(attempt, e):
+                    print(f"Error getting text embedding: {e}")
+                    raise e
         return response
 
     def get_image_embedding(self, image_path, input_type="DOCUMENT"): 
@@ -41,15 +50,37 @@ class EmbeddingModel:
         
         """
         data_url = encode_image(image_path)
-        response = self.client.embed(
-            input=[data_url],
-            input_type=EmbeddingInputType[input_type],
-            model=self.deployment_name
-        )   
+        for attempt in range(self.max_retries):
+            try:
+                response = self.client.embed(
+                    input=[data_url],
+                    input_type=EmbeddingInputType[input_type],
+                    model=self.deployment_name
+                )   
+                break
+            except Exception as e:
+                if not self._retry_exponential_backoff(attempt, e):
+                    print(f"Error getting image embedding: {e}")
+                    raise e
         return response
 
     def cosine_similarity(self, vector1, vector2):
         return np.dot(vector1, vector2) / (np.linalg.norm(vector1) * np.linalg.norm(vector2))
+
+    def _retry_exponential_backoff(self, retry_times: int, exception: Exception):
+        """
+        Retry mechanism with exponential backoff for handling rate limit exceptions (429).
+        """
+        if retry_times >= self.max_retries:
+            print(f"Max retries reached. Last exception: {exception}")
+            return False
+        if "429" not in str(exception):
+            print(f"Non-retryable exception encountered: {exception}")
+            return False
+        wait_time = (2 ** retry_times) + random.uniform(0, 1)
+        print(f"Retrying in {wait_time:.2f} seconds... (Attempt {retry_times + 1}/{self.max_retries})")
+        time.sleep(wait_time)
+        return True
 
 if __name__ == "__main__":
     print("Cohere Embedding Model Test")

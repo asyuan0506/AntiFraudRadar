@@ -35,7 +35,8 @@ class CosmosDBClient:
             latest_time = items[0].get("publication_date", "1970-01-01T00:00:00Z")
         return dateutil.parser.isoparse(latest_time).astimezone(timezone(timedelta(hours=8)))
 
-    def upsert_news_item(self, jsonl_parser: JSONLParser, index: int): 
+
+    def upsert_news_item(self, jsonl_parser: JSONLParser, index: int) -> dict: 
         """
         Upsert a news item in the CosmosDB container from the parsed JSONL data[index].
         """
@@ -49,23 +50,31 @@ class CosmosDBClient:
         # Upsert items for each text chunk
         body_text = jsonl_parser.get_article_object(index, "body_text")
         if body_text != "":
-            self.upsert_text_item(item, body_text)
+            status_text = self.upsert_text_item(item, body_text)
+        if status_text != "OK":
+            return {"status": "Error", "stage": "Text"}
 
         # Upsert items for each image
         images = jsonl_parser.get_article_object(index, "images")
         if len(images) > 0:
-            self.upsert_image_item(item, images)
-
-        return "OK"
+            status_image = self.upsert_image_item(item, images)
+            if status_image != "OK":
+                return {"status": "Error", "stage": "Image"}
+        return {"status": "OK"}
     
-    def upsert_text_item(self, item: dict, body_text: str): 
+    def upsert_text_item(self, item: dict, body_text: str) -> dict: 
         item["type"] = "text_chunk"
         try:
             text_chunks = split_text_into_chunks(body_text, chunk_size=1000, chunk_overlap=200)
+        except Exception as e:
+            print(f"Error splitting text into chunks: {e}")
+            return {"status": "Error", "stage": "Text Splitting"}
+        
+        try:
             embedded_chunks = self.embedding_client.get_text_embedding(text_chunks, "DOCUMENT")
         except Exception as e:
             print(f"Error in text splitting or embedding: {e}")
-            return "Error"
+            return {"status": "Error", "stage": "Text Splitting or Embedding"}
         
         for i, chunk in enumerate(text_chunks):
             item["id"] = str(uuid.uuid4())
@@ -75,8 +84,8 @@ class CosmosDBClient:
                 self.container.upsert_item(item)
             except Exception as e:
                 print(f"Error creating item in CosmosDB: {e}")
-                return "Error"
-        
+                return {"status": "Error", "stage": "Text Upsert", "index": i}
+    
         try:
             del item["type"]
             del item["id"]
@@ -84,13 +93,13 @@ class CosmosDBClient:
             del item["content_vector"]
         except KeyError as e:
             print(f"KeyError during cleanup: {e}")
-            return "Error"
+            return {"status": "Error", "stage": "Cleanup"}
             
-        return "OK"
+        return {"status": "OK"}
 
-    def upsert_image_item(self, item: dict, images: list): 
+    def upsert_image_item(self, item: dict, images: list) -> dict: 
         item["type"] = "image"
-        for image in images:
+        for idx, image in enumerate(images):
             item["id"] = str(uuid.uuid4())
             item["image_url"] = image.get("original_url", "")
             item["caption"] = image.get("caption", "")
@@ -101,9 +110,9 @@ class CosmosDBClient:
                 self.container.upsert_item(item)
             except Exception as e:
                 print(f"Error creating image item in CosmosDB: {e}")
-                return "Error"
+                return {"status": "Error", "stage": "Image Upsert", "index": idx}
         
-        return "OK"
+        return {"status": "OK"}
     
     def query_news_by_vector(self, vector, k=5):
         """

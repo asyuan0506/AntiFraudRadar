@@ -1,5 +1,4 @@
 import os, time
-from embeddings_cohere import EmbeddingModel
 from cosmosdb import CosmosDBClient
 from jsonl_parser import JSONLParser
 import multi_site_crawler
@@ -20,7 +19,7 @@ def crawl_and_store_news():
             print(f"upserted items: {index}, total: {num_items}, Sleeping for 60 second to avoid rate limit...")
             time.sleep(60)
         result = cosmosdb_client.upsert_news_item(jsonl_parser, index)
-        if result != "OK":
+        if result["status"] != "OK":
             print(f"Error upserting news item at index {index}: {result}")
     print("Finished storing news items to CosmosDB.")
     print("Removing images folder...")
