@@ -6,9 +6,9 @@ from utils.image_utils import encode_image, decode_image
 dotenv.load_dotenv()
 
 class ChatGPTClient:
-    api_key = os.getenv("OPENAI_API_KEY")
     def __init__(self, model: str = "gpt-5-nano"):
-        self.client = OpenAI(api_key=ChatGPTClient.api_key)
+        api_key = os.getenv("OPENAI_API_KEY")
+        self.client = OpenAI(api_key=api_key)
         self.model = model
 
     def generate_response(self, user_text="", image_path=None, retrieved_context=None, mode: str = "TEXT"):
@@ -23,8 +23,7 @@ class ChatGPTClient:
         你是一位精準的防詐騙判斷助手。你的目標是快速判斷風險。
         
         【判斷原則】
-        1. 除非發現明確詐騙特徵（如：不明連結、索取個資、匯款要求、高獲利話術），否則請判定為「低風險」。
-        2. 不要對正常對話或官方通知產生過度反應。
+        1. 不要對正常對話或官方通知產生過度反應。
         
         【回答限制】
         1. 回答必須極度簡潔，控制在 200 字以內。
@@ -38,6 +37,7 @@ class ChatGPTClient:
 
         response = self.client.responses.create(
             model=self.model,
+            reasoning={"effort": "medium"},
             instructions=instructions,
             input=self._generate_input(user_text, image_path=image_path, retrieved_context=retrieved_context), #type: ignore
             stream=False, # Set to True for streaming responses
@@ -89,11 +89,32 @@ if __name__ == "__main__":
     print("ChatGPT Client Test")
     chatgpt_client = ChatGPTClient()
 
-    user_text = "請幫我看看這張圖片，這是我收到的簡訊內容，我想知道這是不是詐騙？"
+    user_text = """
+    您好！我們正協助處理大量網路詐騙案件，因國際反詐力度提升，僅今年在台灣已成功幫助133481人追回失去的資金。
+
+    ⚠️ 若您近期曾接觸以下高風險項目，請務必提高警覺：
+    股票投資、虛擬貨幣、跨境電商、刷單、抽獎活動、靈骨塔、生基、骨灰罐、茶葉買賣、古董、黃金等。
+
+    📌 如果您已懷疑或確定遭遇詐騙，但報案後遲遲無法獲得協助，並且仍保留以下資料：
+    ✔️ 對話紀錄
+    ✔️ 收款帳號
+    ✔️ 加密錢包地址
+    ✔️ 詐騙網站資訊
+
+    我們可為您免費進行 初步調查與金流追蹤分析。
+
+    ✅ 不收取任何前期費用
+    ✅ 成功協助追回到達帳戶後才收取服務費
+    ✅ 全程保密，安全可靠，讓您安心
+
+    【聯絡方式】
+    👉LINE ID：@307gliay
+    👉https://lin.ee/37qqMwp
+    """
     image_path = "images/fraud_message.png"
 
     try:
-        response = chatgpt_client.generate_response(user_text=user_text, image_path=image_path)
+        response = chatgpt_client.generate_response(user_text=user_text, image_path=None, mode="TEXT")
         print(response)
     except Exception as e:
         print(f"Error occurred: {e}")
