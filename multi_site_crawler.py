@@ -20,21 +20,9 @@ tz_taiwan = timezone(timedelta(hours=8))
 
 OUTPUT_JSONL = 'scam_rag_dataset.jsonl'
 LOCAL_IMAGE_DIR = 'images/news_images'
-CRAWLED_URLS_FILE = 'crawled_urls.txt'   
 
 os.makedirs(LOCAL_IMAGE_DIR, exist_ok=True)
 
-def load_crawled_urls():
-    if not os.path.exists(CRAWLED_URLS_FILE):
-        return set()
-    with open(CRAWLED_URLS_FILE, 'r', encoding='utf-8') as f:
-        return set(line.strip() for line in f if line.strip())
-
-def save_crawled_url(url):
-    with open(CRAWLED_URLS_FILE, 'a', encoding='utf-8') as f:
-        f.write(url + '\n')
-
-crawled_urls = load_crawled_urls()
 
 def get_latest_publication_date():
     """讀取 jsonl 最後一筆有 publication_date 的時間"""
@@ -121,7 +109,7 @@ def clean_body_text(soup, classes):
     if not container: return ""
     tags = container.find(class_=classes) if isinstance(classes, str) else container
     if not tags: return ""
-    for bad in tags.select('script, iframe, nav, header, footer, aside, div.ad, div.guangxuan, div.widely_declared'): bad.decompose()
+    for bad in tags.select('script, iframe, nav, header, footer, aside, div.ad, div.guangxuan, div.widely_declared, span.endtext'): bad.decompose()
     text = tags.get_text(separator='\n', strip=True)
     return '\n\n'.join(l.strip() for l in text.split('\n') if len(l.strip()) >= 5)
 
@@ -171,7 +159,7 @@ def add_cib_path(chapters):
         ("假求職", "https://www.cib.npa.gov.tw/ch/app/data/view?module=wg116&id=1909&serno=87a85079-c42f-48cb-9506-14e08c912a39"),
     ])
 
-def add_tvbs_path(chapters, pages=15):
+def add_tvbs_path(chapters, pages=2):
     base = 'https://news.tvbs.com.tw/news/searchresult/網路詐騙/news/'
     for i in range(1, pages+1):
         try:
@@ -183,7 +171,7 @@ def add_tvbs_path(chapters, pages=15):
                     chapters.append((li.get_text(strip=True), urljoin(base, li['href'])))
         except: continue
 
-def add_udn_path(chapters, pages=15):
+def add_udn_path(chapters, pages=2):
     for p in range(1, pages+1):
         try:
             r = requests.get("https://udn.com/api/more", params={
@@ -199,18 +187,15 @@ def add_udn_path(chapters, pages=15):
 def crawl_webs_to_jsonl(latest_pub_date=latest_pub_date):
     chapters = []
     add_cib_path(chapters)
-    add_tvbs_path(chapters, pages=15)
-    add_udn_path(chapters, pages=15)
+    add_tvbs_path(chapters, pages=2)
+    add_udn_path(chapters, pages=2)
     print(f"總共收集到 {len(chapters)} 個候選連結")
 
-    new_count = skipped_old = skipped_dup = 0
+    new_count = skipped_old = 0
     mode = 'a' if os.path.exists(OUTPUT_JSONL) else 'w'
 
     with open(OUTPUT_JSONL, mode, encoding='utf-8') as f:
         for title_hint, url in chapters:
-            if url in crawled_urls:
-                skipped_dup += 1
-                continue
 
             try:
                 r = requests.get(url, timeout=20, verify=False)
@@ -249,7 +234,6 @@ def crawl_webs_to_jsonl(latest_pub_date=latest_pub_date):
                 }
 
                 f.write(json.dumps(article, ensure_ascii=False) + '\n')
-                save_crawled_url(url)
                 new_count += 1
                 print(f"新增 → {article['title'][:60]} ({pub_date_str[:10]})")
 
