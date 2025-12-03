@@ -104,19 +104,31 @@ def extract_pub_date(soup, domain):
 
     return None
 
-def clean_body_text(soup, classes):
+def clean_body_text(soup_original, classes):
+    try:
+        soup = BeautifulSoup(str(soup_original), 'html.parser') 
+    except Exception as e:
+        print(f"Error creating soup copy: {e}")
+        return ""
+
     container = soup.find('main') or soup.find('body')
     if not container: return ""
     tags = container.find(class_=classes) if isinstance(classes, str) else container
     if not tags: return ""
-    for bad in tags.select('script, iframe, nav, header, footer, aside, div.ad, div.guangxuan, div.widely_declared, span.endtext'): bad.decompose()
+    
+    for bad in tags.select('script, iframe, nav, header, footer, aside, div, span.endtext'):
+        bad.decompose()
+        
     text = tags.get_text(separator='\n', strip=True)
+    
     return '\n\n'.join(l.strip() for l in text.split('\n') if len(l.strip()) >= 5)
+
 
 def extract_images(soup, base_url, article_id, classes):
     images = []
     container = soup.find('main') or soup.find('body')
     if not container: return images
+    
     areas = []
     if isinstance(classes, list):
         for c in classes:
@@ -129,18 +141,34 @@ def extract_images(soup, base_url, article_id, classes):
     for area in areas:
         for tag in area(['iframe', 'a']):
             tag.decompose()
+            
         for img in area.find_all('img'):
             src = img.get('data-original') or img.get('data-src') or img.get('src')
             if not src: continue
+            
             url = urljoin(base_url, src)
+            
             if any(i['original_url'] == url for i in images): continue
+            
             try:
                 r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=15, verify=False)
-                if r.status_code == 200 and 'image' in r.headers.get('Content-Type',''):
+                
+                if r.status_code == 200 and 'image' in r.headers.get('Content-Type', ''):
                     path = get_storage_path(article_id)
-                    Image.open(BytesIO(r.content)).save(os.path.relpath(path, '.'))
-                    images.append({"original_url": url, "storage_path": path, "caption": img.get('alt',''), "alt_text": img.get('alt','')})
-            except: continue
+                    
+                    from PIL import Image 
+                    
+                    Image.open(BytesIO(r.content)).save(path)
+                    
+                    images.append({
+                        "original_url": url, 
+                        "storage_path": path, 
+                        "caption": img.get('alt', ''), 
+                        "alt_text": img.get('alt', '')
+                    })
+            except Exception as e:
+                continue
+                
     return images
 
 def extract_tags(text):
