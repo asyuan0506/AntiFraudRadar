@@ -121,7 +121,7 @@ def clean_body_text(soup, classes):
     if not container: return ""
     tags = container.find(class_=classes) if isinstance(classes, str) else container
     if not tags: return ""
-    for bad in tags.select('script, iframe, nav, header, footer, aside, div.ad, guangxuan, widely_declared'): bad.decompose()
+    for bad in tags.select('script, iframe, nav, header, footer, aside, div.ad, div.guangxuan, div.widely_declared'): bad.decompose()
     text = tags.get_text(separator='\n', strip=True)
     return '\n\n'.join(l.strip() for l in text.split('\n') if len(l.strip()) >= 5)
 
