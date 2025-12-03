@@ -159,7 +159,7 @@ def add_cib_path(chapters):
         ("假求職", "https://www.cib.npa.gov.tw/ch/app/data/view?module=wg116&id=1909&serno=87a85079-c42f-48cb-9506-14e08c912a39"),
     ])
 
-def add_tvbs_path(chapters, pages=2):
+def add_tvbs_path(chapters, pages=15):
     base = 'https://news.tvbs.com.tw/news/searchresult/網路詐騙/news/'
     for i in range(1, pages+1):
         try:
@@ -171,7 +171,7 @@ def add_tvbs_path(chapters, pages=2):
                     chapters.append((li.get_text(strip=True), urljoin(base, li['href'])))
         except: continue
 
-def add_udn_path(chapters, pages=2):
+def add_udn_path(chapters, pages=15):
     for p in range(1, pages+1):
         try:
             r = requests.get("https://udn.com/api/more", params={
@@ -187,8 +187,8 @@ def add_udn_path(chapters, pages=2):
 def crawl_webs_to_jsonl(latest_pub_date=latest_pub_date):
     chapters = []
     add_cib_path(chapters)
-    add_tvbs_path(chapters, pages=2)
-    add_udn_path(chapters, pages=2)
+    add_tvbs_path(chapters, pages=15)
+    add_udn_path(chapters, pages=15)
     print(f"總共收集到 {len(chapters)} 個候選連結")
 
     new_count = skipped_old = 0
