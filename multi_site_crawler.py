@@ -116,7 +116,7 @@ def clean_body_text(soup_original, classes):
     tags = container.find(class_=classes) if isinstance(classes, str) else container
     if not tags: return ""
     
-    for bad in tags.select('script, iframe, nav, header, footer, aside, div, span.endtext'):
+    for bad in tags.select('script, iframe, nav, header, footer, aside, div, span.endtext, strong'):
         bad.decompose()
         
     text = tags.get_text(separator='\n', strip=True)
