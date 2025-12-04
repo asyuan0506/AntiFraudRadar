@@ -4,7 +4,6 @@ from jsonl_parser import JSONLParser
 import multi_site_crawler
 
 def crawl_and_store_news():
-    # while True:
     cosmosdb_client = CosmosDBClient()
     print("Crawling news websites...")
     latest_time = cosmosdb_client.get_latest_upserted_item_time()
@@ -15,7 +14,7 @@ def crawl_and_store_news():
     num_items = jsonl_parser.get_articles_length()
     print(f"Crawled {num_items} news items. Storing to CosmosDB...")
     for index in range(num_items):
-        if index % 5 == 0:
+        if index % 3 == 0:
             print(f"upserted items: {index}, total: {num_items}, Sleeping for 60 second to avoid rate limit...")
             time.sleep(60)
         result = cosmosdb_client.upsert_news_item(jsonl_parser, index)
@@ -24,7 +23,6 @@ def crawl_and_store_news():
     print("Finished storing news items to CosmosDB.")
     print("Removing images folder...")
     os.system("rm -rf images/news_images/*")
-    # time.sleep(crawl_interval)
 
 if __name__ == "__main__":
     try:

@@ -20,21 +20,9 @@ tz_taiwan = timezone(timedelta(hours=8))
 
 OUTPUT_JSONL = 'scam_rag_dataset.jsonl'
 LOCAL_IMAGE_DIR = 'images/news_images'
-CRAWLED_URLS_FILE = 'crawled_urls.txt'   
 
 os.makedirs(LOCAL_IMAGE_DIR, exist_ok=True)
 
-def load_crawled_urls():
-    if not os.path.exists(CRAWLED_URLS_FILE):
-        return set()
-    with open(CRAWLED_URLS_FILE, 'r', encoding='utf-8') as f:
-        return set(line.strip() for line in f if line.strip())
-
-def save_crawled_url(url):
-    with open(CRAWLED_URLS_FILE, 'a', encoding='utf-8') as f:
-        f.write(url + '\n')
-
-crawled_urls = load_crawled_urls()
 
 def get_latest_publication_date():
     """讀取 jsonl 最後一筆有 publication_date 的時間"""
@@ -116,19 +104,31 @@ def extract_pub_date(soup, domain):
 
     return None
 
-def clean_body_text(soup, classes):
+def clean_body_text(soup_original, classes):
+    try:
+        soup = BeautifulSoup(str(soup_original), 'html.parser') 
+    except Exception as e:
+        print(f"Error creating soup copy: {e}")
+        return ""
+
     container = soup.find('main') or soup.find('body')
     if not container: return ""
     tags = container.find(class_=classes) if isinstance(classes, str) else container
     if not tags: return ""
-    for bad in tags.select('script, iframe, nav, header, footer, aside, div.ad'): bad.decompose()
+    
+    for bad in tags.select('script, iframe, nav, header, footer, aside, div, span.endtext, strong'):
+        bad.decompose()
+        
     text = tags.get_text(separator='\n', strip=True)
+    
     return '\n\n'.join(l.strip() for l in text.split('\n') if len(l.strip()) >= 5)
+
 
 def extract_images(soup, base_url, article_id, classes):
     images = []
     container = soup.find('main') or soup.find('body')
     if not container: return images
+    
     areas = []
     if isinstance(classes, list):
         for c in classes:
@@ -141,18 +141,34 @@ def extract_images(soup, base_url, article_id, classes):
     for area in areas:
         for tag in area(['iframe', 'a']):
             tag.decompose()
+            
         for img in area.find_all('img'):
             src = img.get('data-original') or img.get('data-src') or img.get('src')
             if not src: continue
+            
             url = urljoin(base_url, src)
+            
             if any(i['original_url'] == url for i in images): continue
+            
             try:
                 r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=15, verify=False)
-                if r.status_code == 200 and 'image' in r.headers.get('Content-Type',''):
+                
+                if r.status_code == 200 and 'image' in r.headers.get('Content-Type', ''):
                     path = get_storage_path(article_id)
-                    Image.open(BytesIO(r.content)).save(os.path.relpath(path, '.'))
-                    images.append({"original_url": url, "storage_path": path, "caption": img.get('alt',''), "alt_text": img.get('alt','')})
-            except: continue
+                    
+                    from PIL import Image 
+                    
+                    Image.open(BytesIO(r.content)).save(path)
+                    
+                    images.append({
+                        "original_url": url, 
+                        "storage_path": path, 
+                        "caption": img.get('alt', ''), 
+                        "alt_text": img.get('alt', '')
+                    })
+            except Exception as e:
+                continue
+                
     return images
 
 def extract_tags(text):
@@ -203,18 +219,15 @@ def crawl_webs_to_jsonl(latest_pub_date=latest_pub_date):
     add_udn_path(chapters, pages=15)
     print(f"總共收集到 {len(chapters)} 個候選連結")
 
-    new_count = skipped_old = skipped_dup = 0
+    new_count = skipped_old = 0
     mode = 'a' if os.path.exists(OUTPUT_JSONL) else 'w'
 
     with open(OUTPUT_JSONL, mode, encoding='utf-8') as f:
         for title_hint, url in chapters:
-            if url in crawled_urls:
-                skipped_dup += 1
-                continue
 
             try:
                 r = requests.get(url, timeout=20, verify=False)
-                time.sleep(0.6)
+                time.sleep(1)
                 if r.status_code != 200: continue
 
                 soup = BeautifulSoup(r.text, 'html.parser')
@@ -249,7 +262,6 @@ def crawl_webs_to_jsonl(latest_pub_date=latest_pub_date):
                 }
 
                 f.write(json.dumps(article, ensure_ascii=False) + '\n')
-                save_crawled_url(url)
                 new_count += 1
                 print(f"新增 → {article['title'][:60]} ({pub_date_str[:10]})")
 
