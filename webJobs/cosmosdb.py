@@ -51,15 +51,15 @@ class CosmosDBClient:
         body_text = jsonl_parser.get_article_object(index, "body_text")
         if body_text != "":
             status_text = self.upsert_text_item(item, body_text)
-        if status_text != "OK":
-            return {"status": "Error", "stage": "Text"}
+        if status_text["status"] != "OK":
+            return status_text
 
         # Upsert items for each image
         images = jsonl_parser.get_article_object(index, "images")
         if len(images) > 0:
             status_image = self.upsert_image_item(item, images)
-            if status_image != "OK":
-                return {"status": "Error", "stage": "Image"}
+            if status_image["status"] != "OK":
+                return status_image
         return {"status": "OK"}
     
     def upsert_text_item(self, item: dict, body_text: str) -> dict: 

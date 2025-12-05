@@ -19,7 +19,7 @@ def crawl_and_store_news():
             time.sleep(60)
         result = cosmosdb_client.upsert_news_item(jsonl_parser, index)
         if result["status"] != "OK":
-            print(f"Error upserting news item at index {index}: {result}")
+            print(f"Error upserting news item: {result}")
     print("Finished storing news items to CosmosDB.")
     print("Removing images folder...")
     os.system("rm -rf images/news_images/*")

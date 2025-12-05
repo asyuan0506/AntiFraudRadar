@@ -18,7 +18,7 @@ class EmbeddingModel:
             endpoint=EmbeddingModel.endpoint,
             credential=AzureKeyCredential(str(EmbeddingModel.api_key)),
         )
-        self.max_retries = 6
+        self.max_retries = 6 # TODO: Fix experience rate limit problem
 
     def get_text_embedding(self, texts:list[str], input_type="DOCUMENT"): 
         """
@@ -35,12 +35,12 @@ class EmbeddingModel:
                     input_type=EmbeddingInputType[input_type],
                     model=self.deployment_name
                 )
-                break
+                return response
             except Exception as e:
                 if not self._retry_exponential_backoff(attempt, e):
                     print(f"Error getting text embedding: {e}")
                     raise e
-        return response
+        return {"status": "Error"}
 
     def get_image_embedding(self, image_path, input_type="DOCUMENT"): 
         """
@@ -57,12 +57,12 @@ class EmbeddingModel:
                     input_type=EmbeddingInputType[input_type],
                     model=self.deployment_name
                 )   
-                break
+                return response
             except Exception as e:
                 if not self._retry_exponential_backoff(attempt, e):
                     print(f"Error getting image embedding: {e}")
                     raise e
-        return response
+        return {"status": "Error"}
 
     def cosine_similarity(self, vector1, vector2):
         return np.dot(vector1, vector2) / (np.linalg.norm(vector1) * np.linalg.norm(vector2))

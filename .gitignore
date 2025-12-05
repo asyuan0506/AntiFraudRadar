@@ -212,3 +212,7 @@ images/news_images/*
 
 # Audios
 audios/received/*
+
+*.zip
+*.tar.gz
+*.tar
