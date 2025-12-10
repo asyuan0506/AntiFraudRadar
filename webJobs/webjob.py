@@ -23,6 +23,8 @@ def crawl_and_store_news():
     print("Finished storing news items to CosmosDB.")
     print("Removing images folder...")
     os.system("rm -rf images/news_images/*")
+    print("Removing scam_rag_dataset.jsonl...")
+    os.system("rm -f scam_rag_dataset.jsonl")
 
 if __name__ == "__main__":
     try:

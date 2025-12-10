@@ -123,7 +123,7 @@ class CosmosDBClient:
             Returns:
             List of news items similar to the input vector.
         """
-        query_text = f'''SELECT TOP {k} c.url, c.source, c.title, c.publication_date, c.content, c.image_url, c.caption, c.alt_text, VectorDistance(c.content_vector, {vector}) AS SimilarityScore\
+        query_text = f'''SELECT TOP {k} c.news_id, c.url, c.source, c.title, c.publication_date, c.content, c.image_url, c.caption, c.alt_text, VectorDistance(c.content_vector, {vector}) AS SimilarityScore\
                         FROM c\
                         ORDER BY VectorDistance(c.content_vector, {vector})'''
         results = self.container.query_items(
@@ -164,6 +164,17 @@ class CosmosDBClient:
     #         populate_query_metrics=True,
     #     )
     #     return results
+
+    def query_news_by_news_id(self, news_id: str):
+        query_text = f'''SELECT c.url, c.source, c.title\
+                        FROM c\
+                        WHERE c.news_id = "{news_id}"'''
+        results = self.container.query_items(
+            query=query_text,
+            enable_cross_partition_query=True,
+            populate_query_metrics=True,
+        )
+        return list(results)
 
 if __name__ == "__main__":
     print("CosmosDB Client Test")

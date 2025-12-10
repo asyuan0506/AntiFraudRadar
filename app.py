@@ -68,11 +68,13 @@ def handle_text_message(event):
         
         msg = event.message.text
         print(f"Message Received")
-        retrieved_context = retrive_content_by_text(msg)
+        retrieved_context, retrieved_news_urls = retrive_content_by_text(msg)
 
         reply = chatgpt_client.generate_response(user_text=msg, retrieved_context=retrieved_context, mode="TEXT")
         if not reply:
             reply = "Sorry, I couldn't process your request."
+        if len(retrieved_context) > 0:
+            reply += "\n\n相關新聞:\n" + "\n".join(retrieved_news_urls)
 
         reply_with_text(event.reply_token, reply)
 
@@ -91,8 +93,10 @@ def handle_image_message(event): #TODO: Handle multiple images using imageSet.in
                 os.mkdir(path)
             with open(f"{path}/{msg.id}.jpeg", "wb") as f:
                 f.write(file_data)
-                retrieved_context = retrive_content_by_image(f"{path}/{msg.id}.jpeg")
+                retrieved_context, retrieved_news_urls = retrive_content_by_image(f"{path}/{msg.id}.jpeg")
                 reply = chatgpt_client.generate_response(image_path=f"{path}/{msg.id}.jpeg", retrieved_context=retrieved_context, mode="IMAGE")
+                if len(retrieved_news_urls) > 0:
+                    reply += "\n\n相關新聞:\n" + "\n".join(retrieved_news_urls)
             os.remove(f"{path}/{msg.id}.jpeg")
         else:
             reply = "Sorry, I couldn't process your image."
@@ -163,9 +167,13 @@ def retrive_content_by_text(text: str):
     embedding = embedding_model.get_text_embedding([text], "QUERY").data[0].embedding
     items = cosmosdb_client.query_news_by_vector(embedding, k=5)
     retrieved_context = ""
+    retrieved_news_urls = set()
     for item in items:
+        if item.get("SimilarityScore", 0.0) <= 0.35:
+            continue
         retrieved_context += f"\n- Title: {item.get('title', '')}\n  Content: {item.get('content', '')}\n"
-    return retrieved_context
+        retrieved_news_urls.add(item.get("url", ""))
+    return retrieved_context, retrieved_news_urls
 
 def retrive_content_by_image(image_path: str):
     img_embedding = embedding_model.get_image_embedding(image_path, "QUERY").data[0].embedding
@@ -176,29 +184,16 @@ def retrive_content_by_image(image_path: str):
     embedding_new_text = embedding_model.get_text_embedding([new_text_query], input_type="QUERY")
     items = cosmosdb_client.query_news_by_vector(embedding_new_text.data[0].embedding, k=5)
     retrieved_context = ""
+    retrieved_news_urls = set()
     for item in items:
+        if item.get("SimilarityScore", 0.0) <= 0.35:
+            continue
         retrieved_context += f"\n- Title: {item.get('title', '')}\n  Content: {item.get('content', '')}\n"
-    return retrieved_context
-
-def crawl_and_store_news():
-    # while True:
-    print("Crawling news websites...")
-    latest_time = cosmosdb_client.get_latest_upserted_item_time()
-    # multi_site_crawler.crawl_webs_to_jsonl(latest_time)
-    jsonl_parser = JSONLParser("scam_rag_dataset.jsonl")
-    jsonl_parser.parse()
-
-    num_items = jsonl_parser.get_articles_length()
-    print(f"Crawled {num_items} news items. Storing to CosmosDB...")
-    for index in range(num_items):
-        result = cosmosdb_client.upsert_news_item(jsonl_parser, index)
-        if result != "OK":
-            print(f"Error upserting news item at index {index}: {result}")
-    print("Finished storing news items to CosmosDB.")
-    print("Removing images folder...")
-    os.system("rm -rf images/news_images/*")
-    print(f"Sleeping for {crawl_interval} seconds...")
-    # time.sleep(crawl_interval)
+        news_id = item.get("news_id", "")
+        news_item = cosmosdb_client.query_news_by_news_id(news_id)
+        if len(news_item) > 0:
+            retrieved_news_urls.add(news_item[0].get("url", ""))
+    return retrieved_context, retrieved_news_urls
 
 if __name__ == "__main__":
     try:

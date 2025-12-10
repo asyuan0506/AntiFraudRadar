@@ -267,7 +267,6 @@ def crawl_webs_to_jsonl(latest_pub_date=latest_pub_date):
 
             except Exception as e:
                 logger.error(f"失敗 {url}: {e}")
-
     print(f"\n完成！本次新增 {new_count} 篇")
     return new_count
 
