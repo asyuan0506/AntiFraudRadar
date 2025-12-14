@@ -6,7 +6,7 @@ import time
 # LINE Message API (v3)
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
-from linebot.v3.messaging import Configuration, ApiClient, MessagingApi, ReplyMessageRequest, TextMessage
+from linebot.v3.messaging import Configuration, ApiClient, MessagingApi, ReplyMessageRequest, PushMessageRequest, TextMessage, ShowLoadingAnimationRequest
 from linebot.v3.webhooks import MessageEvent, TextMessageContent, ImageMessageContent, AudioMessageContent
 
 from chatgpt_integration import ChatGPTClient
@@ -46,13 +46,33 @@ def reply_with_text(reply_token, text):
             )
         )
 
+def push_with_text(user_id, text):
+    with ApiClient(configuration) as api_client:
+        line_bot_api = MessagingApi(api_client)
+        line_bot_api.push_message_with_http_info(
+            PushMessageRequest(
+                to=user_id,
+                messages=[TextMessage(text=text, quickReply=None, quoteToken=None)],
+                notificationDisabled=False,
+                customAggregationUnits=None
+            )
+        )
+
+def display_loading_animation(chat_id, loading_seconds = 20):
+    with ApiClient(configuration) as api_client:
+        line_bot_api = MessagingApi(api_client)
+        line_bot_api.show_loading_animation_with_http_info(
+            ShowLoadingAnimationRequest(
+                chatId= chat_id,
+                loadingSeconds=loading_seconds
+            )
+        )
 
 @app.route("/", methods=['POST'])
 def linebot(): #TODO: Multi-turn conversation 
     signature = request.headers['X-Line-Signature']
 
     body = request.get_data(as_text=True)  # Get the received message content TODO: Careful with large inputs
-
     try:
         handler.handle(body, signature)
     except InvalidSignatureError:
@@ -64,27 +84,32 @@ def linebot(): #TODO: Multi-turn conversation
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_text_message(event):
     with ApiClient(configuration) as api_client:
-        line_bot_api = MessagingApi(api_client)
+        # line_bot_api = MessagingApi(api_client)
         
         msg = event.message.text
-        print(f"Message Received")
-        retrieved_context, retrieved_news_urls = retrive_content_by_text(msg)
+        chat_id = event.source.user_id
+        print(f"Message Received from user: {chat_id}")
+        display_loading_animation(chat_id, loading_seconds=60)
+        retrieved_context, retrieved_news_urls = retrieve_content_by_text(msg)
 
         reply = chatgpt_client.generate_response(user_text=msg, retrieved_context=retrieved_context, mode="TEXT")
-        if not reply:
-            reply = "Sorry, I couldn't process your request."
         if len(retrieved_context) > 0:
             reply += "\n\n相關新聞:\n" + "\n".join(retrieved_news_urls)
-
-        reply_with_text(event.reply_token, reply)
+        if not reply:
+            reply = "Sorry, I couldn't process your request."
+        
+        # reply_with_text(event.reply_token, reply)
+        push_with_text(chat_id, reply)
 
 @handler.add(MessageEvent, message=ImageMessageContent)
 def handle_image_message(event): #TODO: Handle multiple images using imageSet.index
     with ApiClient(configuration) as api_client:
-        line_bot_api = MessagingApi(api_client)
+        # line_bot_api = MessagingApi(api_client)
 
         msg = event.message
-        print(f"Image Received")
+        chat_id = event.source.user_id
+        print(f"Image Received from user: {chat_id}")
+        display_loading_animation(chat_id, loading_seconds=60)
 
         file_data = get_file(msg.id)
         if file_data and isinstance(file_data, bytes):
@@ -93,7 +118,8 @@ def handle_image_message(event): #TODO: Handle multiple images using imageSet.in
                 os.mkdir(path)
             with open(f"{path}/{msg.id}.jpeg", "wb") as f:
                 f.write(file_data)
-                retrieved_context, retrieved_news_urls = retrive_content_by_image(f"{path}/{msg.id}.jpeg")
+                retrieved_context, retrieved_news_urls = retrieve_content_by_image(f"{path}/{msg.id}.jpeg")
+                display_loading_animation(chat_id, loading_seconds=60)
                 reply = chatgpt_client.generate_response(image_path=f"{path}/{msg.id}.jpeg", retrieved_context=retrieved_context, mode="IMAGE")
                 if len(retrieved_news_urls) > 0:
                     reply += "\n\n相關新聞:\n" + "\n".join(retrieved_news_urls)
@@ -102,15 +128,18 @@ def handle_image_message(event): #TODO: Handle multiple images using imageSet.in
             reply = "Sorry, I couldn't process your image."
 
         # Reply message
-        reply_with_text(event.reply_token, reply)
+        # reply_with_text(event.reply_token, reply)
+        push_with_text(chat_id, reply)
 
 @handler.add(MessageEvent, message=AudioMessageContent)
 def handle_audio_message(event):
     with ApiClient(configuration) as api_client:
-        line_bot_api = MessagingApi(api_client)
+        # line_bot_api = MessagingApi(api_client)
 
         msg = event.message
-        print(f"Audio Received")
+        chat_id = event.source.user_id
+        print(f"Audio Received from user: {chat_id}")
+        display_loading_animation(chat_id, loading_seconds=60)
         
         status = verify_video_audio_prepared(msg.id)
         file_data = get_file(msg.id)
@@ -126,13 +155,18 @@ def handle_audio_message(event):
             with open(f"{path}/{msg.id}.m4a", "wb") as audio_bytes_file:
                 audio_bytes_file.write(file_data)
                 user_text = tts_client.transcribe_audio(f"{path}/{msg.id}.m4a")["text"]
-                retrieved_context = retrive_content_by_text(user_text)
+                display_loading_animation(chat_id, loading_seconds=60)
+                retrieved_context, retrieved_news_urls = retrieve_content_by_text(user_text)
+                display_loading_animation(chat_id, loading_seconds=60)
                 reply = chatgpt_client.generate_response(user_text=user_text, retrieved_context=retrieved_context, mode="AUDIO")
+                if len(retrieved_news_urls) > 0:
+                    reply += "\n\n相關新聞:\n" + "\n".join(retrieved_news_urls)
             os.remove(f"{path}/{msg.id}.m4a")
         else:
             reply = "Sorry, I couldn't process your audio message."
         # Reply message
-        reply_with_text(event.reply_token, reply)
+        # reply_with_text(event.reply_token, reply)
+        push_with_text(chat_id, reply)
 
 def get_file(message_id):
     url = f"https://api-data.line.me/v2/bot/message/{message_id}/content"
@@ -163,7 +197,7 @@ def verify_video_audio_prepared(message_id):
 
     return None # TODO: String return
 
-def retrive_content_by_text(text: str):
+def retrieve_content_by_text(text: str):
     embedding = embedding_model.get_text_embedding([text], "QUERY").data[0].embedding
     items = cosmosdb_client.query_news_by_vector(embedding, k=5)
     retrieved_context = ""
@@ -175,7 +209,7 @@ def retrive_content_by_text(text: str):
         retrieved_news_urls.add(item.get("url", ""))
     return retrieved_context, retrieved_news_urls
 
-def retrive_content_by_image(image_path: str):
+def retrieve_content_by_image(image_path: str):
     img_embedding = embedding_model.get_image_embedding(image_path, "QUERY").data[0].embedding
     new_text_query = "這些內容與什麼有關:"
     items = cosmosdb_client.query_news_images_by_image_vector(img_embedding, k=3)
