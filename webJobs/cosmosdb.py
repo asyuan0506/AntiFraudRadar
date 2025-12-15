@@ -65,7 +65,9 @@ class CosmosDBClient:
     def upsert_text_item(self, item: dict, body_text: str) -> dict: 
         item["type"] = "text_chunk"
         try:
-            text_chunks = split_text_into_chunks(body_text, chunk_size=1000, chunk_overlap=200)
+            text_chunks = split_text_into_chunks(body_text, 
+                                                 chunk_size=1000, 
+                                                 chunk_overlap=200)
         except Exception as e:
             print(f"Error splitting text into chunks: {e}")
             return {"status": "Error", "stage": "Text Splitting"}
@@ -106,7 +108,8 @@ class CosmosDBClient:
             item["alt_text"] = image.get("alt_text", "")
             image_path = image.get("storage_path", "")
             try:
-                item["content_vector"] = self.embedding_client.get_image_embedding(image_path, "DOCUMENT").data[0].embedding
+                item["content_vector"] = self.embedding_client.get_image_embedding(
+                                            image_path, "DOCUMENT").data[0].embedding
                 self.container.upsert_item(item)
             except Exception as e:
                 print(f"Error creating image item in CosmosDB: {e}")

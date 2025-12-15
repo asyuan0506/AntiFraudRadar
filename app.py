@@ -120,7 +120,8 @@ def handle_image_message(event): #TODO: Handle multiple images using imageSet.in
                 f.write(file_data)
                 retrieved_context, retrieved_news_urls = retrieve_content_by_image(f"{path}/{msg.id}.jpeg")
                 display_loading_animation(chat_id, loading_seconds=60)
-                reply = chatgpt_client.generate_response(image_path=f"{path}/{msg.id}.jpeg", retrieved_context=retrieved_context, mode="IMAGE")
+                reply = chatgpt_client.generate_response(image_path=f"{path}/{msg.id}.jpeg", 
+                                                         retrieved_context=retrieved_context, mode="IMAGE")
                 if len(retrieved_news_urls) > 0:
                     reply += "\n\n相關新聞:\n" + "\n".join(retrieved_news_urls)
             os.remove(f"{path}/{msg.id}.jpeg")
@@ -214,6 +215,8 @@ def retrieve_content_by_image(image_path: str):
     new_text_query = "這些內容與什麼有關:"
     items = cosmosdb_client.query_news_images_by_image_vector(img_embedding, k=3)
     for item in items:
+        if item.get("SimilarityScore", 0.0) <= 0.35:
+            continue
         new_text_query += f"\n- {item.get('caption', '')} {item.get('alt_text', '')}"
     embedding_new_text = embedding_model.get_text_embedding([new_text_query], input_type="QUERY")
     items = cosmosdb_client.query_news_by_vector(embedding_new_text.data[0].embedding, k=5)
@@ -223,10 +226,7 @@ def retrieve_content_by_image(image_path: str):
         if item.get("SimilarityScore", 0.0) <= 0.35:
             continue
         retrieved_context += f"\n- Title: {item.get('title', '')}\n  Content: {item.get('content', '')}\n"
-        news_id = item.get("news_id", "")
-        news_item = cosmosdb_client.query_news_by_news_id(news_id)
-        if len(news_item) > 0:
-            retrieved_news_urls.add(news_item[0].get("url", ""))
+        retrieved_news_urls.add(item.get("url", ""))
     return retrieved_context, retrieved_news_urls
 
 if __name__ == "__main__":

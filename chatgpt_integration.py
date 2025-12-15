@@ -39,14 +39,16 @@ class ChatGPTClient:
             model=self.model,
             reasoning={"effort": "medium"},
             instructions=instructions,
-            input=self._generate_input(user_text, image_path=image_path, retrieved_context=retrieved_context), #type: ignore
+            input=self._generate_input(user_text, 
+                                       image_path=image_path, 
+                                       retrieved_context=retrieved_context), #type: ignore
             stream=False, # Set to True for streaming responses
             max_output_tokens=4096,
         ) # type: ignore
 
         return response.output_text
 
-    def _generate_input(self, user_input, image_path=None, retrieved_context=None): #TODO: Put similar chunks in
+    def _generate_input(self, user_input, image_path=None, retrieved_context=None):
         input_template = f"""
             請依照以下格式回答：
             【風險等級】：(高風險 / 可疑 / 低風險)

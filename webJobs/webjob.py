@@ -17,7 +17,7 @@ def crawl_and_store_news():
         if index % 3 == 0:
             print(f"upserted items: {index}, total: {num_items}, Sleeping for 60 second to avoid rate limit...")
             time.sleep(60)
-        result = cosmosdb_client.upsert_news_item(jsonl_parser, index)
+        result = cosmosdb_client.upsert_news_item(jsonl_parser, index) # type: ignore
         if result["status"] != "OK":
             print(f"Error upserting news item: {result}")
     print("Finished storing news items to CosmosDB.")

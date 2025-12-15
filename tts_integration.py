@@ -5,7 +5,7 @@ import requests, json
 load_dotenv()
 
 class TTSClient:
-    endpoint = "https://ntpuf-mikgdxgz-eastus2.cognitiveservices.azure.com/openai/deployments/gpt-4o-mini-transcribe/audio/transcriptions?api-version=2025-03-01-preview"
+    endpoint = os.getenv("GPT_TTS_ENDPOINT")
     api_key = os.getenv("GPT_TTS_API_KEY")
     def __init__(self):
         self.headers = {
