@@ -100,7 +100,6 @@ We use a single-container strategy in Cosmos DB, distinguishing items via a `typ
 2.  Install packages
     ```
     pip install -r requirements.txt
-
     ```
 
 3.  Setup environment variables (`.env`)
