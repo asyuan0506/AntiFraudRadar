@@ -5,7 +5,7 @@
 [![Python](https://img.shields.io/badge/Python-3.9%2B-blue)](https://www.python.org/)
 [![LangChain](https://img.shields.io/badge/LangChain-Framework-green)](https://www.langchain.com/)
 [![Azure Cosmos DB](https://img.shields.io/badge/Azure-Cosmos%20DB-0078D4)](https://azure.microsoft.com/en-us/services/cosmos-db/)
-[![Cohere](https://img.shields.io/badge/Cohere-Embed%20v3-purple)](https://cohere.com/)
+[![Cohere](https://img.shields.io/badge/Cohere-Embed%20v4-purple)](https://cohere.com/)
 
 ## 📖 Introduction
 
