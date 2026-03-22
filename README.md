@@ -20,7 +20,6 @@ By leveraging an advanced **RAG (Retrieval-Augmented Generation)** architecture 
 
 * **Multi-modal Detection**: Supports both text and image inputs, capable of identifying visual scam indicators (e.g., fake logos, manipulated screenshots).
 * **Cross-modal Semantic Retrieval (2-Stage)**:
-    * Implements an **Image-Guided Hierarchical Retrieval** strategy.
     * **Stage 1 (Visual Mapping)**: Performs vector search to find top-3 similar images and extracts their Captions and Alt-text to transform visual signals into descriptive text.
     * **Stage 2 (Factual Grounding)**: Uses the extracted text as a semantic query to retrieve the top-5 relevant news articles, effectively bridging the "modality gap" and reducing LLM hallucinations.
 * **Real-time Data Updates**: A backend crawler continuously monitors trusted sources (e.g., CIB, TVBS News), cleaning and vectorizing data into the system.
