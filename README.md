@@ -38,7 +38,7 @@ This project is built on **Azure Cosmos DB for NoSQL** as the vector store, util
 
 ### Image Retrieval Strategy
 To bridge the modality gap, we implement a Visual-to-Semantic workflow:
-* ** Stage 1 (Visual Mapping)**: User uploads image -> Vector Search finds top-3 similar images -> Extracts their Captions & Alt-text.
+* **Stage 1 (Visual Mapping)**: User uploads image -> Vector Search finds top-3 similar images -> Extracts their Captions & Alt-text.
 * **Stage 2 (Semantic Search)**: Uses extracted text as a query -> Vector Search finds top-5 relevant news articles to ensure factual grounding.
 * **Generation**: The LLM synthesizes the retrieved news content to generate an evidence-based warning and advice.
 
