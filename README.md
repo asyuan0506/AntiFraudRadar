@@ -11,7 +11,7 @@
 
 **AntiFraudRadar** is a Line Bot application integrating Large Language Models (LLM) with a real-time news database. It is designed to tackle rapidly evolving scam tactics that traditional keyword-based filters fail to catch.
 
-By leveraging an advanced **RAG (Retrieval-Augmented Generation)** architecture with **Multi-modal** capabilities, the system allows users to forward suspicious text messages or images (e.g., fraudulent flyers, fake QR codes). The bot verifies this input against a vector database of the latest anti-scam news and provides evidence-based warnings and advice.
+By leveraging an advanced **RAG (Retrieval-Augmented Generation)** architecture with **Multi-modal** capabilities, the system allows users to forward suspicious text messages or images. The bot verifies this input against a vector database of the latest anti-scam news and provides evidence-based warnings and advice.
 
 > [!TIP]
 > **Project Insights:** For more details on development and architecture, please refer to our [Full Presentation (Canva)](https://www.canva.com/design/DAG7CPS1rcQ/dYE2rge3IG_j71mtjuIf-Q/edit?utm_content=DAG7CPS1rcQ&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton).
@@ -19,10 +19,10 @@ By leveraging an advanced **RAG (Retrieval-Augmented Generation)** architecture 
 ## 🚀 Key Features
 
 * **Multi-modal Detection**: Supports both text and image inputs, capable of identifying visual scam indicators (e.g., fake logos, manipulated screenshots).
-* **Precision Retrieval (2-Stage Strategy)**:
+* **Cross-modal Semantic Retrieval (2-Stage)**:
     * Implements an **Image-Guided Hierarchical Retrieval** strategy.
-    * **Stage 1 (Coarse)**: Uses image vectors to scope the search to specific relevant news articles.
-    * **Stage 2 (Fine)**: Performs a focused text search within that scope to retrieve precise details, significantly reducing **retrieval noise** and **LLM hallucinations**.
+    * **Stage 1 (Visual Mapping)**: Performs vector search to find top-3 similar images and extracts their Captions and Alt-text to transform visual signals into descriptive text.
+    * **Stage 2 (Factual Grounding)**: Uses the extracted text as a semantic query to retrieve the top-5 relevant news articles, effectively bridging the "modality gap" and reducing LLM hallucinations.
 * **Real-time Data Updates**: A backend crawler continuously monitors trusted sources (e.g., CIB, TVBS News), cleaning and vectorizing data into the system.
 * **Explainable AI**: Responses include citations and links to original news sources, ensuring transparency and trust.
 
@@ -38,9 +38,9 @@ This project is built on **Azure Cosmos DB for NoSQL** as the vector store, util
 
 ### Image Retrieval Strategy
 To bridge the modality gap, we implement a Visual-to-Semantic workflow:
-** Stage 1 (Visual Mapping)**: User uploads image -> Vector Search finds top-3 similar images -> Extracts their Captions & Alt-text.
-**Stage 2 (Semantic Search)**: Uses extracted text as a query -> Vector Search finds top-5 relevant news articles to ensure factual grounding.
-**Generation**: The LLM synthesizes the retrieved news content to generate an evidence-based warning and advice.
+* ** Stage 1 (Visual Mapping)**: User uploads image -> Vector Search finds top-3 similar images -> Extracts their Captions & Alt-text.
+* **Stage 2 (Semantic Search)**: Uses extracted text as a query -> Vector Search finds top-5 relevant news articles to ensure factual grounding.
+* **Generation**: The LLM synthesizes the retrieved news content to generate an evidence-based warning and advice.
 
 ## 🛠️ Tech Stack
 
