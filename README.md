@@ -13,6 +13,9 @@
 
 By leveraging an advanced **RAG (Retrieval-Augmented Generation)** architecture with **Multi-modal** capabilities, the system allows users to forward suspicious text messages or images (e.g., fraudulent flyers, fake QR codes). The bot verifies this input against a vector database of the latest anti-scam news and provides evidence-based warnings and advice.
 
+> [!TIP]
+> **Project Insights:** For more details on development and architecture, please refer to our [Full Presentation (Canva)](https://www.canva.com/design/DAG7CPS1rcQ/dYE2rge3IG_j71mtjuIf-Q/edit?utm_content=DAG7CPS1rcQ&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton).
+
 ## 🚀 Key Features
 
 * **Multi-modal Detection**: Supports both text and image inputs, capable of identifying visual scam indicators (e.g., fake logos, manipulated screenshots).
@@ -33,14 +36,11 @@ This project is built on **Azure Cosmos DB for NoSQL** as the vector store, util
 3.  **Embedding**: Uses Cohere API to vectorize text (token-based splitting) and images respectively.
 4.  **Indexing**: Ingests data into Azure Cosmos DB with vector indexing enabled.
 
-### Retrieval Strategy (The "Secret Sauce")
-To solve the "modality gap," we implement a **Coarse-to-Fine** workflow for image queries:
-
-1.  **Stage 1 (Image Search)**: User uploads an image -> Vector Search identifies similar `Image Items` -> Extracts the parent `article_id`.
-2.  **Stage 2 (Scoped Text Search)**: The system locks the scope to the identified `article_id` -> Performs a second vector search to find the most relevant `Text Chunks` explaining the scam.
-3.  **Generation**: The retrieved text chunks are fed into the LLM to generate the final response.
-
-
+### Image Retrieval Strategy
+To bridge the modality gap, we implement a Visual-to-Semantic workflow:
+** Stage 1 (Visual Mapping)**: User uploads image -> Vector Search finds top-3 similar images -> Extracts their Captions & Alt-text.
+**Stage 2 (Semantic Search)**: Uses extracted text as a query -> Vector Search finds top-5 relevant news articles to ensure factual grounding.
+**Generation**: The LLM synthesizes the retrieved news content to generate an evidence-based warning and advice.
 
 ## 🛠️ Tech Stack
 
